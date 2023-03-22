@@ -1,15 +1,24 @@
 use std::io::stdout;
 
 use crossterm::style::Print;
-use crossterm::{cursor, ExecutableCommand, Result};
+use crossterm::{ExecutableCommand, Result};
 
 mod maths {
+    use derive_more::Display;
+    use std::fmt::{Debug, Formatter};
     use std::ops::Add;
 
-    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Display)]
+    #[display(fmt = "({row}, {col})")]
     pub struct Pos {
         pub row: usize,
         pub col: usize,
+    }
+
+    impl Debug for Pos {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            std::fmt::Display::fmt(&self, f)
+        }
     }
 
     impl From<(usize, usize)> for Pos {
@@ -35,9 +44,16 @@ mod maths {
 
 mod tetro {
     use super::maths::Pos;
+    
 
-    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
     pub struct Tetro([Pos; 4]);
+
+    // impl std::fmt::Debug for Tetro {
+    //     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    //         std::fmt::Display::fmt(&self, f)
+    //     }
+    // }
 
     const TETRO_COUNT: usize = 19;
 
@@ -107,7 +123,7 @@ mod tetro {
         }
     }
 
-    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
+    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
     pub struct PositionedTetro {
         pub tetro: Tetro,
         pub pos: Pos,
@@ -135,7 +151,7 @@ mod tetro {
         fn next(&mut self) -> Option<Self::Item> {
             if self.i < TETRO_COUNT - 1 {
                 self.i += 1;
-                Some(&TETROS[self.i])
+                Some(&TETROS[self.i - 1])
             } else {
                 None
             }
@@ -145,15 +161,25 @@ mod tetro {
 
 mod grid_checker {
     use grid::Grid;
+    use std::fmt::{Debug, Formatter};
 
     use crate::maths::Pos;
     use crate::tetro::{PositionedTetro, Tetro, TetroIter};
 
-    #[derive(Clone)]
+    #[derive(Clone, derive_more::Display)]
     pub enum Cell {
+        #[display(fmt = "-")]
         Empty,
+        #[display(fmt = "x")]
         Unavailable,
+        #[display(fmt = "+")]
         Occupied,
+    }
+
+    impl Debug for Cell {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            std::fmt::Display::fmt(&self, f)
+        }
     }
 
     trait Placer {
@@ -169,8 +195,8 @@ mod grid_checker {
             fn find(grid: &Grid<Cell>, tetro: &Tetro) -> Option<Pos> {
                 let tetro_size = tetro.size();
 
-                for row in 0..(grid.rows() - tetro_size.0) {
-                    for col in 0..grid.cols() - tetro_size.1 {
+                for row in 0..(grid.rows() - tetro_size.0 + 1) {
+                    for col in 0..grid.cols() - tetro_size.1 + 1 {
                         let pos = Pos { row, col };
 
                         let all_empty = tetro.iter().all(|tetro_pos| {
@@ -190,7 +216,7 @@ mod grid_checker {
                 None
             }
 
-            match find(&self, tetro) {
+            match find(self, tetro) {
                 Some(pos) => {
                     for tetro_pos in tetro.iter() {
                         let Pos { row, col } = &pos + tetro_pos;
@@ -234,6 +260,7 @@ mod grid_checker {
             stack: &mut Vec<PositionedTetro>,
             results: &mut Vec<Placement>,
         ) -> RecursiveReturn {
+            // dbg!(&grid);
             for tetro in TetroIter::new() {
                 if let Some(pos) = grid.try_put(tetro) {
                     stack.push(PositionedTetro::new(tetro.clone(), pos));
@@ -244,12 +271,10 @@ mod grid_checker {
                         RecursiveReturn::Cont => continue,
                         RecursiveReturn::Stop => return ret,
                     }
-                } else {
-                    if grid.how_many_free() == 0 {
-                        results.push(stack.clone());
-                        if results.len() == 5 {
-                            return RecursiveReturn::Stop;
-                        }
+                } else if grid.how_many_free() == 0 {
+                    results.push(stack.clone());
+                    if results.len() == 1 {
+                        return RecursiveReturn::Stop;
                     }
                 }
             }
@@ -315,16 +340,16 @@ mod live_terminal_conf {
     }
 
     impl State {
-        pub fn new() -> Self {
+        pub fn new(rows: usize, cols: usize) -> Self {
             Self {
-                rows: Bounded(5),
-                cols: Bounded(5),
+                rows: Bounded(rows),
+                cols: Bounded(cols),
                 cursor: (Bounded(0), Bounded(0)),
                 occupied: HashSet::new(),
             }
         }
 
-        pub fn configure(mut self) -> Result<Configuration> {
+        pub fn configure(mut self) -> Result<Self> {
             stdout().execute(EnterAlternateScreen)?;
             terminal::enable_raw_mode().unwrap();
 
@@ -369,13 +394,15 @@ mod live_terminal_conf {
                 LoopResult::Terminate => {
                     std::process::exit(1);
                 }
-                LoopResult::Proceed => {
-                    let conf = Configuration {
-                        size: (self.rows.0, self.cols.0),
-                        occupied: self.occupied,
-                    };
-                    Ok(conf)
-                }
+                LoopResult::Proceed => Ok(self),
+            }
+        }
+
+        pub fn into_configuration(self) -> Configuration {
+            
+            Configuration {
+                size: (self.rows.0, self.cols.0),
+                occupied: self.occupied,
             }
         }
 
@@ -436,7 +463,7 @@ mod reporter {
 
     use std::io::stdout;
 
-    use crossterm::{cursor, style::Print, ExecutableCommand, Result};
+    use crossterm::{style::Print, ExecutableCommand, Result};
     use grid::Grid;
 
     use crate::grid_checker::Placement;
@@ -493,7 +520,9 @@ mod reporter {
 }
 
 fn main() -> Result<()> {
-    let conf = live_terminal_conf::State::new().configure()?;
+    let conf = live_terminal_conf::State::new(4, 4)
+        .configure()?
+        .into_configuration();
     let size = conf.size;
     let placements = conf.find_placements();
 
@@ -501,7 +530,7 @@ fn main() -> Result<()> {
 
     for item in placements {
         reporter::Report::report(&item, &size)?;
-        stdout().execute(cursor::MoveToNextLine(3))?;
+        stdout().execute(Print("\n"))?;
     }
 
     Ok(())
