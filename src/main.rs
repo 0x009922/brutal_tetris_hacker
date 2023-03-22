@@ -44,7 +44,6 @@ mod maths {
 
 mod tetro {
     use super::maths::Pos;
-    
 
     #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
     pub struct Tetro([Pos; 4]);
@@ -201,10 +200,7 @@ mod grid_checker {
 
                         let all_empty = tetro.iter().all(|tetro_pos| {
                             let Pos { row, col } = &pos + tetro_pos;
-                            match grid[row][col] {
-                                Cell::Empty => true,
-                                _ => false,
-                            }
+                            matches!(grid[row][col], Cell::Empty)
                         });
 
                         if all_empty {
@@ -361,24 +357,21 @@ mod live_terminal_conf {
             }
 
             let loop_result = loop {
-                match event::read().unwrap() {
-                    Event::Key(key) => match key {
-                        event::KeyEvent { code, .. } => match code {
-                            event::KeyCode::Esc => break LoopResult::Terminate,
-                            event::KeyCode::Enter => break LoopResult::Proceed,
-                            event::KeyCode::Char('w') => self.rows.dec(),
-                            event::KeyCode::Char('s') => self.rows.inc(),
-                            event::KeyCode::Char('a') => self.cols.dec(),
-                            event::KeyCode::Char('d') => self.cols.inc(),
-                            event::KeyCode::Left => self.cursor.0.dec(),
-                            event::KeyCode::Right => self.cursor.0.inc(),
-                            event::KeyCode::Up => self.cursor.1.dec(),
-                            event::KeyCode::Down => self.cursor.1.inc(),
-                            event::KeyCode::Char(' ') => self.toggle_under_cursor(),
-                            _ => {}
-                        },
-                    },
-                    _ => {}
+                if let Event::Key(event::KeyEvent { code, .. }) = event::read().unwrap() {
+                    match code {
+                        event::KeyCode::Esc => break LoopResult::Terminate,
+                        event::KeyCode::Enter => break LoopResult::Proceed,
+                        event::KeyCode::Char('w') => self.rows.dec(),
+                        event::KeyCode::Char('s') => self.rows.inc(),
+                        event::KeyCode::Char('a') => self.cols.dec(),
+                        event::KeyCode::Char('d') => self.cols.inc(),
+                        event::KeyCode::Left => self.cursor.0.dec(),
+                        event::KeyCode::Right => self.cursor.0.inc(),
+                        event::KeyCode::Up => self.cursor.1.dec(),
+                        event::KeyCode::Down => self.cursor.1.inc(),
+                        event::KeyCode::Char(' ') => self.toggle_under_cursor(),
+                        _ => {}
+                    }
                 }
 
                 stdout().execute(Clear(ClearType::All))?;
@@ -399,7 +392,6 @@ mod live_terminal_conf {
         }
 
         pub fn into_configuration(self) -> Configuration {
-            
             Configuration {
                 size: (self.rows.0, self.cols.0),
                 occupied: self.occupied,
