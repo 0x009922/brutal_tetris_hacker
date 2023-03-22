@@ -1,3 +1,4 @@
+use clap::Parser;
 use std::io::stdout;
 
 use crossterm::style::Print;
@@ -46,7 +47,10 @@ mod tetro {
     use super::maths::Pos;
 
     #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-    pub struct Tetro([Pos; 4]);
+    pub struct Tetro {
+        positions: [Pos; 4],
+        size: (usize, usize),
+    }
 
     // impl std::fmt::Debug for Tetro {
     //     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -56,24 +60,52 @@ mod tetro {
 
     const TETRO_COUNT: usize = 19;
 
-    #[inline]
-    const fn transform((row, col): (usize, usize)) -> Pos {
-        Pos { row, col }
+    const fn const_tetro(positions: [(usize, usize); 4]) -> Tetro {
+        const fn transform_pos((row, col): (usize, usize)) -> Pos {
+            Pos { row, col }
+        }
+
+        const fn max_const(a: usize, b: usize) -> usize {
+            if a > b {
+                a
+            } else {
+                b
+            }
+        }
+
+        const fn max_const_tuple(size: (usize, usize), pos: (usize, usize)) -> (usize, usize) {
+            (max_const(size.0, pos.0 + 1), max_const(size.1, pos.1 + 1))
+        }
+
+        let size = {
+            let mut size = (1, 1);
+
+            size = max_const_tuple(size, positions[0]);
+            size = max_const_tuple(size, positions[1]);
+            size = max_const_tuple(size, positions[2]);
+            size = max_const_tuple(size, positions[3]);
+
+            size
+        };
+
+        Tetro {
+            positions: [
+                transform_pos(positions[0]),
+                transform_pos(positions[1]),
+                transform_pos(positions[2]),
+                transform_pos(positions[3]),
+            ],
+            size,
+        }
     }
 
     macro_rules! tetro {
         ($a:expr, $b:expr, $c:expr, $d:expr) => {
-            Tetro([
-                // ..
-                transform($a),
-                transform($b),
-                transform($c),
-                transform($d),
-            ])
+            const_tetro([$a, $b, $c, $d])
         };
     }
 
-    const TETROS: [Tetro; TETRO_COUNT] = [
+    pub const TETROS: [Tetro; TETRO_COUNT] = [
         tetro!((0, 0), (0, 1), (1, 0), (1, 1)),
         tetro!((0, 0), (0, 1), (0, 2), (0, 3)),
         tetro!((0, 0), (1, 0), (2, 0), (3, 0)),
@@ -96,20 +128,12 @@ mod tetro {
     ];
 
     impl Tetro {
-        pub fn size(&self) -> (usize, usize) {
-            let mut rows = 1;
-            let mut cols = 1;
-
-            for Pos { row, col } in self.iter() {
-                rows = rows.max(row + 1);
-                cols = cols.max(col + 1);
-            }
-
-            (rows, cols)
+        pub fn size(&self) -> &(usize, usize) {
+            &self.size
         }
 
         pub fn iter(&self) -> impl Iterator<Item = &Pos> {
-            self.0.iter()
+            self.positions.iter()
         }
     }
 
@@ -118,18 +142,18 @@ mod tetro {
         type IntoIter = core::array::IntoIter<Self::Item, 4>;
 
         fn into_iter(self) -> Self::IntoIter {
-            self.0.into_iter()
+            self.positions.into_iter()
         }
     }
 
     #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
     pub struct PositionedTetro {
-        pub tetro: Tetro,
+        pub tetro: &'static Tetro,
         pub pos: Pos,
     }
 
     impl PositionedTetro {
-        pub fn new(tetro: Tetro, pos: Pos) -> Self {
+        pub fn new(tetro: &'static Tetro, pos: Pos) -> Self {
             Self { tetro, pos }
         }
     }
@@ -168,7 +192,7 @@ mod grid_checker {
     mod cells {
         use super::{Grid, Pos, PositionedTetro, Tetro};
 
-        #[derive(Clone, derive_more::Display)]
+        #[derive(Clone, derive_more::Display, Debug)]
         pub enum Cell {
             #[display(fmt = "-")]
             Empty,
@@ -180,8 +204,8 @@ mod grid_checker {
 
         pub struct Cells {
             grid: Grid<Cell>,
-            initially_unavailable: usize,
             how_many_free: usize,
+            min_free_cells: usize,
         }
 
         impl Cells {
@@ -197,11 +221,12 @@ mod grid_checker {
                     initially_unavailable += 1;
                     how_many_free -= 1;
                 }
+                let min_free_cells = (grid.cols() * grid.rows() - initially_unavailable) % 4;
 
                 Self {
                     grid,
                     how_many_free,
-                    initially_unavailable,
+                    min_free_cells,
                 }
             }
 
@@ -231,8 +256,12 @@ mod grid_checker {
             fn find_any_fit_for(&self, tetro: &Tetro) -> Option<Pos> {
                 let tetro_size = tetro.size();
 
-                for row in 0..(self.grid.rows() - tetro_size.0 + 1) {
-                    for col in 0..(self.grid.cols() - tetro_size.1 + 1) {
+                if tetro_size.0 > self.grid.rows() || tetro_size.1 > self.grid.cols() {
+                    return None;
+                }
+
+                for row in 0..(self.grid.rows() - (tetro_size.0) + 1) {
+                    for col in 0..(self.grid.cols() - (tetro_size.1) + 1) {
                         let pos = Pos { row, col };
 
                         let all_empty = tetro.iter().all(|tetro_pos| {
@@ -253,9 +282,8 @@ mod grid_checker {
                 &self.how_many_free
             }
 
-            pub fn min_free_cells(&self) -> usize {
-                let available = self.grid.cols() * self.grid.rows() - self.initially_unavailable;
-                available % 4
+            pub fn min_free_cells(&self) -> &usize {
+                &self.min_free_cells
             }
         }
     }
@@ -271,10 +299,6 @@ mod grid_checker {
             Stop,
         }
 
-        // struct FoundPlacements {
-        //     items: Vec<()>,
-        // }
-
         struct Perf {
             iters: u128,
             ts: std::time::Instant,
@@ -286,24 +310,37 @@ mod grid_checker {
             results: &mut Vec<Placement>,
             perf: &mut Perf,
         ) -> RecursiveReturn {
-            perf.iters += 1;
-            if perf.iters % 10_000 == 0 {
-                println!("iters: {}, time: {:.2?}", perf.iters, perf.ts.elapsed());
+            {
+                let how_many_free = cells.how_many_free();
+                let min_free_cells = cells.min_free_cells();
+
+                if how_many_free == min_free_cells {
+                    results.push(stack.clone());
+                    // if results.len() == RESULTS_COUNT {
+                    //     return RecursiveReturn::Stop;
+                    // }
+                }
             }
+
+            perf.iters += 1;
+            if perf.iters % 100_000 == 0 {
+                println!(
+                    "iters: {}, time: {:.2?}, results: {}",
+                    perf.iters,
+                    perf.ts.elapsed(),
+                    results.len()
+                );
+            }
+
             for tetro in TetroIter::new() {
                 if let Some(pos) = cells.try_put(tetro) {
-                    stack.push(PositionedTetro::new(tetro.clone(), pos));
-                    let ret = recursive(cells, stack, results, perf);
-                    let item = stack.pop().unwrap();
-                    cells.unwind(&item);
-                    match ret {
-                        RecursiveReturn::Cont => continue,
-                        RecursiveReturn::Stop => return ret,
-                    }
-                } else if *cells.how_many_free() == cells.min_free_cells() {
-                    results.push(stack.clone());
-                    if results.len() == 1 {
-                        return RecursiveReturn::Stop;
+                    stack.push(PositionedTetro::new(tetro, pos));
+                    match recursive(cells, stack, results, perf) {
+                        RecursiveReturn::Cont => {
+                            let item = stack.pop().unwrap();
+                            cells.unwind(&item);
+                        }
+                        ret @ RecursiveReturn::Stop => return ret,
                     }
                 }
             }
@@ -314,7 +351,7 @@ mod grid_checker {
         let mut stack = Vec::with_capacity((size.0 * size.1) / 4);
         let mut grid = Cells::new(size, unavailable);
 
-        let mut results = Vec::new();
+        let mut results = Vec::with_capacity(stack.len());
         recursive(
             &mut grid,
             &mut stack,
@@ -491,7 +528,9 @@ mod reporter {
 
     use std::io::stdout;
 
-    use crossterm::style::{Attribute, Color, ResetColor, SetAttribute, SetForegroundColor};
+    use crossterm::style::{
+        Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
+    };
     use crossterm::{style::Print, ExecutableCommand, Result};
     use grid::Grid;
 
@@ -507,8 +546,35 @@ mod reporter {
         #[derive(Clone)]
         struct View {
             char: char,
-            color: Option<Color>,
+            color_fore: Option<Color>,
+            color_back: Option<Color>,
             attrs: Vec<Option<Attribute>>,
+        }
+
+        impl View {
+            fn new(char: char) -> Self {
+                Self {
+                    char,
+                    color_fore: None,
+                    color_back: None,
+                    attrs: vec![],
+                }
+            }
+
+            fn foreground(mut self, color: Color) -> Self {
+                self.color_fore = Some(color);
+                self
+            }
+
+            fn background(mut self, color: Color) -> Self {
+                self.color_back = Some(color);
+                self
+            }
+
+            fn attr(mut self, attr: Option<Attribute>) -> Self {
+                self.attrs.push(attr);
+                self
+            }
         }
 
         struct ViewsComposer {
@@ -547,11 +613,9 @@ mod reporter {
 
                 self.views.insert(
                     item,
-                    View {
-                        char: sym,
-                        color: Some(self.colors[idx_in_colors]),
-                        attrs: vec![self.attrs[idx_in_attrs]],
-                    },
+                    View::new(sym)
+                        .foreground(self.colors[idx_in_colors])
+                        .attr(self.attrs[idx_in_attrs]),
                 );
                 self
             }
@@ -564,11 +628,7 @@ mod reporter {
         let mut grid = Grid::init(
             conf.size.0,
             conf.size.1,
-            View {
-                char: CHAR_EMPTY,
-                color: None,
-                attrs: vec![Some(Attribute::Dim)],
-            },
+            View::new(CHAR_EMPTY).attr(Some(Attribute::Dim)),
         );
 
         for item in placement {
@@ -581,18 +641,19 @@ mod reporter {
         }
 
         for (row, col) in conf.unavailable.iter() {
-            grid[*row][*col] = View {
-                char: CHAR_UNAVAILABLE,
-                color: Some(Color::Red),
-                attrs: Vec::new(),
-            }
+            grid[*row][*col] = View::new(CHAR_UNAVAILABLE)
+                .foreground(Color::DarkRed)
+                .background(Color::DarkRed)
         }
 
         for row in 0..grid.rows() {
             stdout().execute(Print("  "))?;
             for x in grid.iter_row(row) {
-                if let Some(col) = x.color {
+                if let Some(col) = x.color_fore {
                     stdout().execute(SetForegroundColor(col))?;
+                }
+                if let Some(col) = x.color_back {
+                    stdout().execute(SetBackgroundColor(col))?;
                 }
                 stdout().execute(Print(x.char))?;
                 for attr in x.attrs.iter().flatten() {
@@ -607,18 +668,37 @@ mod reporter {
     }
 }
 
+const RESULTS_COUNT: usize = 3;
+
+#[derive(Parser)]
+struct Args {
+    #[arg(long)]
+    no_print_placements: bool,
+}
+
 fn main() -> Result<()> {
-    let conf = live_terminal_conf::State::new(6, 6)
+    let args = Args::parse();
+
+    let conf = live_terminal_conf::State::new(4, 4)
         .configure()?
         .into_configuration();
+
+    let start = std::time::Instant::now();
     let placements = conf.find_placements();
+    let elapsed = start.elapsed();
 
-    stdout().execute(Print(format!("Found placements: {}\n\n", placements.len())))?;
-
-    for item in placements {
-        reporter::report(&item, &conf)?;
-        stdout().execute(Print("\n"))?;
+    if !args.no_print_placements {
+        for item in placements.iter() {
+            reporter::report(item, &conf)?;
+            stdout().execute(Print("\n"))?;
+        }
     }
+
+    stdout().execute(Print(format!(
+        "\n  Found placements: {} (time: {:.2?})\n",
+        placements.len(),
+        elapsed
+    )))?;
 
     Ok(())
 }
