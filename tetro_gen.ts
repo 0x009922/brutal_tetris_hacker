@@ -72,6 +72,7 @@ x
 
 interface Tetro {
     items: [number, number][]
+    col_shift: number
 }
 
 const tetros: Tetro[] = []
@@ -82,13 +83,17 @@ for (const line of lines) {
     const trimmed = line.trimEnd();
     if (trimmed) {
         if (!last) {
-            last = { tetro: { items: []}, y: -1 }
+            last = { tetro: { items: [], col_shift: 0 }, y: -1 }
         }
         last.y ++;
 
         for (let i = 0; i < trimmed.length; i++) {
             if (trimmed[i] !== ' ') {
-                last.tetro.items.push([last.y, i])
+                const { tetro } = last
+                if (tetro.items.length === 0) {
+                    tetro.col_shift = i;
+                }
+                tetro.items.push([last.y, i])
             }
         }
 
@@ -104,4 +109,4 @@ for (const line of lines) {
 
 last && tetros.push(last.tetro)
 
-console.log(tetros.map(x => `tetro!(${x.items.map(([row, col]) => `(${row}, ${col})`).join(', ')})`).join(',\n'))
+console.log(tetros.map(x => `tetro!(${x.items.map(([row, col]) => `(${row}, ${col})`).join(', ')}, ${x.col_shift})`).join(',\n'))

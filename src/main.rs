@@ -2,17 +2,18 @@ use std::io::stdout;
 
 use clap::Parser;
 use crossterm::style::Print;
-use crossterm::{terminal, ExecutableCommand, Result};
+use crossterm::{cursor, terminal, ExecutableCommand, Result};
 
 use crate::brute_force::CollectStats;
 
-mod maths {
+mod util {
     use std::fmt::{Debug, Formatter};
     use std::ops::Add;
 
     use derive_more::Display;
+    use grid::Grid;
 
-    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Display)]
+    #[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Display)]
     #[display(fmt = "({row}, {col})")]
     pub struct Pos {
         pub row: usize,
@@ -44,20 +45,67 @@ mod maths {
             }
         }
     }
+
+    impl Pos {
+        pub fn new(row: usize, col: usize) -> Self {
+            Self { row, col }
+        }
+    }
+
+    pub trait PosInGrid<T> {
+        fn pos<'a>(&'a self, pos: &Pos) -> &'a T;
+    }
+
+    impl<T> PosInGrid<T> for Grid<T> {
+        fn pos<'a>(&'a self, pos: &Pos) -> &'a T {
+            &self[pos.row][pos.col]
+        }
+    }
+
+    #[derive(Clone, Copy, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
+    pub struct Size {
+        pub rows: usize,
+        pub cols: usize,
+    }
+
+    impl Size {
+        pub const fn new(rows: usize, cols: usize) -> Self {
+            Self { rows, cols }
+        }
+    }
+
+    pub trait SizeOf {
+        fn size_of(&self) -> Size;
+    }
+
+    impl<T> SizeOf for Grid<T> {
+        fn size_of(&self) -> Size {
+            Size::new(self.rows(), self.cols())
+        }
+    }
+
+    impl From<(usize, usize)> for Size {
+        fn from((rows, cols): (usize, usize)) -> Self {
+            Self::new(rows, cols)
+        }
+    }
 }
 
 mod tetro {
-    use super::maths::Pos;
+    use super::util::Pos;
+    use crate::util::Size;
+    use std::ops::Add;
 
     #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
     pub struct Tetro {
         positions: [Pos; 4],
-        size: (usize, usize),
+        size: Size,
+        col_shift: usize,
     }
 
     const TETRO_COUNT: usize = 19;
 
-    const fn const_tetro(positions: [(usize, usize); 4]) -> Tetro {
+    const fn const_tetro(positions: [(usize, usize); 4], col_shift: usize) -> Tetro {
         const fn transform_pos((row, col): (usize, usize)) -> Pos {
             Pos { row, col }
         }
@@ -92,45 +140,55 @@ mod tetro {
                 transform_pos(positions[2]),
                 transform_pos(positions[3]),
             ],
-            size,
+            size: Size::new(size.0, size.1),
+            col_shift,
         }
     }
 
     macro_rules! tetro {
-        ($a:expr, $b:expr, $c:expr, $d:expr) => {
-            const_tetro([$a, $b, $c, $d])
+        ($a:expr, $b:expr, $c:expr, $d:expr, $shift:expr) => {
+            const_tetro([$a, $b, $c, $d], $shift)
         };
     }
 
-    pub const TETROS: [Tetro; TETRO_COUNT] = [
-        tetro!((0, 0), (0, 1), (1, 0), (1, 1)),
-        tetro!((0, 0), (0, 1), (0, 2), (0, 3)),
-        tetro!((0, 0), (1, 0), (2, 0), (3, 0)),
-        tetro!((0, 0), (0, 1), (0, 2), (1, 1)),
-        tetro!((0, 0), (1, 0), (1, 1), (2, 0)),
-        tetro!((0, 1), (1, 0), (1, 1), (1, 2)),
-        tetro!((0, 1), (1, 0), (1, 1), (2, 1)),
-        tetro!((0, 0), (0, 1), (0, 2), (1, 0)),
-        tetro!((0, 0), (1, 0), (2, 0), (2, 1)),
-        tetro!((0, 2), (1, 0), (1, 1), (1, 2)),
-        tetro!((0, 0), (0, 1), (1, 1), (2, 1)),
-        tetro!((0, 0), (0, 1), (0, 2), (1, 2)),
-        tetro!((0, 1), (1, 1), (2, 0), (2, 1)),
-        tetro!((0, 0), (1, 0), (1, 1), (1, 2)),
-        tetro!((0, 0), (0, 1), (1, 0), (2, 0)),
-        tetro!((0, 1), (0, 2), (1, 0), (1, 1)),
-        tetro!((0, 0), (1, 0), (1, 1), (2, 1)),
-        tetro!((0, 0), (0, 1), (1, 1), (1, 2)),
-        tetro!((0, 1), (1, 0), (1, 1), (2, 0)),
+    const TETROS: [Tetro; TETRO_COUNT] = [
+        tetro!((0, 0), (0, 1), (1, 0), (1, 1), 0),
+        tetro!((0, 0), (0, 1), (0, 2), (0, 3), 0),
+        tetro!((0, 0), (1, 0), (2, 0), (3, 0), 0),
+        tetro!((0, 0), (0, 1), (0, 2), (1, 1), 0),
+        tetro!((0, 0), (1, 0), (1, 1), (2, 0), 0),
+        tetro!((0, 1), (1, 0), (1, 1), (1, 2), 1),
+        tetro!((0, 1), (1, 0), (1, 1), (2, 1), 1),
+        tetro!((0, 0), (0, 1), (0, 2), (1, 0), 0),
+        tetro!((0, 0), (1, 0), (2, 0), (2, 1), 0),
+        tetro!((0, 2), (1, 0), (1, 1), (1, 2), 2),
+        tetro!((0, 0), (0, 1), (1, 1), (2, 1), 0),
+        tetro!((0, 0), (0, 1), (0, 2), (1, 2), 0),
+        tetro!((0, 1), (1, 1), (2, 0), (2, 1), 1),
+        tetro!((0, 0), (1, 0), (1, 1), (1, 2), 0),
+        tetro!((0, 0), (0, 1), (1, 0), (2, 0), 0),
+        tetro!((0, 1), (0, 2), (1, 0), (1, 1), 1),
+        tetro!((0, 0), (1, 0), (1, 1), (2, 1), 0),
+        tetro!((0, 0), (0, 1), (1, 1), (1, 2), 0),
+        tetro!((0, 1), (1, 0), (1, 1), (2, 0), 1),
     ];
 
+    #[cfg(test)]
+    pub const I_HORIZONTAL: &Tetro = &TETROS[1];
+    #[cfg(test)]
+    pub const T_LOOK_LEFT: &Tetro = &TETROS[6];
+
     impl Tetro {
-        pub fn size(&self) -> &(usize, usize) {
+        pub fn size(&self) -> &Size {
             &self.size
         }
 
         pub fn iter(&self) -> impl Iterator<Item = &Pos> {
             self.positions.iter()
+        }
+
+        pub fn col_shift(&self) -> &usize {
+            &self.col_shift
         }
     }
 
@@ -158,26 +216,114 @@ mod tetro {
     pub fn static_tetros_iter() -> impl Iterator<Item = &'static Tetro> {
         TETROS.iter()
     }
+
+    #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
+    pub struct PlacedTetroInBoundaries(PlacedTetro);
+
+    impl PlacedTetroInBoundaries {
+        pub fn in_boundaries(placed: PlacedTetro, boundaries: Size) -> Option<Self> {
+            let PlacedTetro { tetro, position } = placed;
+
+            let tetro_size = tetro.size();
+            let tetro_col_shift = *tetro.col_shift();
+
+            if tetro_col_shift > position.col
+                || position.col + tetro_size.cols - tetro_col_shift > boundaries.cols
+                || position.row + tetro_size.rows > boundaries.rows
+            {
+                return None;
+            }
+
+            Some(Self(placed))
+        }
+
+        pub fn iter_relative_to_place<'a>(&'a self) -> impl Iterator<Item = Pos> + 'a {
+            let Self(PlacedTetro {
+                tetro,
+                position: relative,
+            }) = self;
+
+            tetro.iter().map(|pos| {
+                let mut pos = pos.add(relative);
+                pos.col -= tetro.col_shift;
+                pos
+            })
+        }
+    }
+
+    impl From<PlacedTetroInBoundaries> for PlacedTetro {
+        fn from(value: PlacedTetroInBoundaries) -> Self {
+            value.0
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn check_for_3x3() {
+            assert!(matches!(
+                PlacedTetroInBoundaries::in_boundaries(
+                    PlacedTetro::new(I_HORIZONTAL, Pos::new(0, 0)),
+                    Size::new(3, 3)
+                ),
+                None
+            ));
+        }
+
+        #[test]
+        fn check_for_horizontal_i_in_4x4() {
+            assert!(matches!(
+                PlacedTetroInBoundaries::in_boundaries(
+                    PlacedTetro::new(I_HORIZONTAL, Pos::new(0, 0)),
+                    Size::new(4, 4)
+                ),
+                Some(_)
+            ));
+        }
+
+        #[test]
+        fn check_horizontal_i_in_4x4_at_col_1() {
+            assert!(matches!(
+                PlacedTetroInBoundaries::in_boundaries(
+                    PlacedTetro::new(I_HORIZONTAL, Pos::new(0, 1)),
+                    Size::new(4, 4)
+                ),
+                None
+            ));
+        }
+
+        #[test]
+        fn checj_t_at_right_border() {
+            assert!(matches!(
+                PlacedTetroInBoundaries::in_boundaries(
+                    PlacedTetro::new(T_LOOK_LEFT, Pos::new(0, 2)),
+                    Size::new(3, 3)
+                ),
+                Some(_)
+            ));
+        }
+    }
 }
 
 mod brute_force {
     use std::collections::HashSet;
-    use std::ops::Add;
 
     use grid::Grid;
 
-    use crate::maths::Pos;
-    use crate::tetro::{static_tetros_iter, PlacedTetro, Tetro};
+    use crate::tetro::{static_tetros_iter, PlacedTetro, PlacedTetroInBoundaries, Tetro};
+    use crate::util::{Pos, PosInGrid, Size, SizeOf};
 
-    pub type Placement = Vec<PlacedTetro>;
+    pub type Placement = Vec<PlacedTetroInBoundaries>;
 
     pub struct Configuration {
-        pub size: (usize, usize),
-        pub unavailable: HashSet<(usize, usize)>,
+        pub size: Size,
+        pub unavailable: HashSet<Pos>,
     }
 
     impl Configuration {
-        pub fn new(size: (usize, usize), unavailable: HashSet<(usize, usize)>) -> Self {
+        pub fn new(size: Size, unavailable: HashSet<Pos>) -> Self {
             Self { size, unavailable }
         }
 
@@ -185,11 +331,11 @@ mod brute_force {
         where
             S: CollectStats,
         {
-            RecursionState::brute_force(&self, stats)
+            RecursionState::brute_force(self, stats)
         }
     }
 
-    #[derive(Clone, derive_more::Display, Debug)]
+    #[derive(Clone, Copy, derive_more::Display, Debug)]
     pub enum Cell {
         #[display(fmt = "-")]
         Empty,
@@ -206,10 +352,9 @@ mod brute_force {
         grid: Grid<Cell>,
         how_many_free: usize,
         min_free_cells: usize,
-
-        stack: Vec<PlacedTetro>,
+        stack: Vec<PlacedTetroInBoundaries>,
         results: Vec<PlacementResult>,
-
+        positions_for_lookup: Vec<Pos>,
         stats: &'a mut S,
     }
 
@@ -226,16 +371,12 @@ mod brute_force {
             state.results
         }
 
-        fn new(
-            (rows, cols): (usize, usize),
-            unavailable: &'_ HashSet<(usize, usize)>,
-            stats: &'a mut S,
-        ) -> Self {
+        fn new(Size { rows, cols }: Size, unavailable: &'_ HashSet<Pos>, stats: &'a mut S) -> Self {
             let mut grid = Grid::init(rows, cols, Cell::Empty);
             let mut how_many_free = rows * cols;
             let mut initially_unavailable = 0;
-            for (x, y) in unavailable.iter() {
-                grid[*x][*y] = Cell::Unavailable;
+            for Pos { row, col } in unavailable.iter() {
+                grid[*row][*col] = Cell::Unavailable;
                 initially_unavailable += 1;
                 how_many_free -= 1;
             }
@@ -243,6 +384,14 @@ mod brute_force {
 
             let stack = Vec::with_capacity(cols * rows);
             let results = Vec::new();
+
+            // initially - all positions
+            let mut iter_positions = Vec::with_capacity(cols * rows);
+            for row in 0..rows {
+                for col in 0..cols {
+                    iter_positions.push(Pos { row, col })
+                }
+            }
 
             Self {
                 grid,
@@ -252,6 +401,8 @@ mod brute_force {
                 stack,
                 results,
                 stats,
+
+                positions_for_lookup: iter_positions,
             }
         }
 
@@ -267,58 +418,49 @@ mod brute_force {
             }
 
             for tetro in static_tetros_iter() {
-                if let Some(pos) = self.find_any_fit_for(tetro) {
-                    self.fill_and_push(PlacedTetro::new(tetro, pos));
+                if let Some(tetro_in_boundaries) = self.find_any_fit_for(tetro) {
+                    self.fill_and_push(tetro_in_boundaries);
                     self.recursion();
                     self.pop_and_clear();
                 }
             }
         }
 
-        fn fill_and_push(&mut self, positioned: PlacedTetro) {
-            for i in positioned.tetro.iter() {
-                let Pos { row, col } = positioned.position.add(i);
-                self.grid[row][col] = Cell::Occupied;
+        fn fill_and_push(&mut self, tetro: PlacedTetroInBoundaries) {
+            for i in tetro.iter_relative_to_place() {
+                self.grid[i.row][i.col] = Cell::Occupied;
                 self.how_many_free -= 1;
             }
-            self.stack.push(positioned);
+            self.stack.push(tetro);
         }
 
         fn pop_and_clear(&mut self) {
-            let PlacedTetro {
-                tetro,
-                position: pos,
-            } = self.stack.pop().unwrap();
-            for i in tetro.iter() {
-                let Pos { row, col } = pos.add(i);
-                self.grid[row][col] = Cell::Empty;
+            let placed_tetro = self.stack.pop().unwrap();
+            for i in placed_tetro.iter_relative_to_place() {
+                self.grid[i.row][i.col] = Cell::Empty;
                 self.how_many_free += 1;
             }
         }
 
-        fn find_any_fit_for(&self, tetro: &Tetro) -> Option<Pos> {
-            let tetro_size = tetro.size();
-
-            if tetro_size.0 > self.grid.rows() || tetro_size.1 > self.grid.cols() {
-                return None;
-            }
-
-            for row in 0..(self.grid.rows() - (tetro_size.0) + 1) {
-                for col in 0..(self.grid.cols() - (tetro_size.1) + 1) {
-                    let pos = Pos { row, col };
-
-                    let all_empty = tetro.iter().all(|tetro_pos| {
-                        let Pos { row, col } = &pos + tetro_pos;
-                        matches!(self.grid[row][col], Cell::Empty)
-                    });
-
-                    if all_empty {
-                        return Some(pos);
+        fn find_any_fit_for(&self, tetro: &'static Tetro) -> Option<PlacedTetroInBoundaries> {
+            self.positions_for_lookup
+                .iter()
+                .map(|pos| {
+                    PlacedTetroInBoundaries::in_boundaries(
+                        PlacedTetro::new(tetro, *pos),
+                        self.grid.size_of(),
+                    )
+                })
+                .find(|in_boundaries| {
+                    if let Some(in_boundaries) = in_boundaries {
+                        let all_empty = in_boundaries
+                            .iter_relative_to_place()
+                            .all(|pos| matches!(self.grid.pos(&pos), Cell::Empty));
+                        return all_empty;
                     }
-                }
-            }
-
-            None
+                    false
+                })
+                .flatten()
         }
     }
 
@@ -338,7 +480,6 @@ mod app_terminal {
     use std::collections::{HashMap, HashSet};
     use std::fmt::Write;
     use std::io::stdout;
-    use std::ops::Add;
 
     use crossterm::style::{
         Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
@@ -354,8 +495,8 @@ mod app_terminal {
     use grid::Grid;
 
     use crate::brute_force::{Configuration, PlacementResult};
-    use crate::maths::Pos;
-    use crate::tetro::PlacedTetro;
+    use crate::tetro::PlacedTetroInBoundaries;
+    use crate::util::{Pos, Size};
 
     pub const CHAR_EMPTY: char = '·';
     pub const CHAR_UNAVAILABLE: char = '×';
@@ -383,7 +524,7 @@ mod app_terminal {
             rows: Bounded<1, { usize::MAX }>,
             cols: Bounded<1, { usize::MAX }>,
             cursor: (Bounded<0, { usize::MAX }>, Bounded<0, { usize::MAX }>),
-            unavailable: HashSet<(usize, usize)>,
+            unavailable: HashSet<Pos>,
         }
 
         impl State {
@@ -443,7 +584,15 @@ mod app_terminal {
             }
 
             pub fn into_configuration(self) -> Configuration {
-                Configuration::new((self.rows.0, self.cols.0), self.unavailable)
+                Configuration::new((self.rows.0, self.cols.0).into(), self.unavailable)
+            }
+
+            fn cursor_as_pos(&self) -> Pos {
+                (self.cursor.0 .0, self.cursor.1 .0).into()
+            }
+
+            fn as_size(&self) -> Size {
+                (self.rows.0, self.cols.0).into()
             }
 
             fn print(&self) -> Result<()> {
@@ -457,41 +606,12 @@ mod app_terminal {
                     .execute(Print(format!("N x M: {} x {}", self.rows.0, self.cols.0)))?
                     .execute(cursor::MoveToNextLine(2))?;
 
-                for row in 0..self.rows.0 {
-                    stdout().execute(cursor::MoveRight(2))?;
-
-                    for col in 0..self.cols.0 {
-                        let cursor = (row, col) == (self.cursor.0 .0, self.cursor.1 .0);
-
-                        if self.unavailable.contains(&(row, col)) {
-                            execute!(
-                                stdout(),
-                                SetBackgroundColor(if cursor {
-                                    Color::DarkRed
-                                } else {
-                                    Color::White
-                                }),
-                                SetAttribute(Attribute::Bold),
-                                SetForegroundColor(Color::DarkRed),
-                                Print(CHAR_UNAVAILABLE),
-                                ResetColor
-                            )?;
-                        } else {
-                            execute!(
-                                stdout(),
-                                SetBackgroundColor(if cursor {
-                                    Color::DarkGrey
-                                } else {
-                                    Color::White
-                                }),
-                                Print(CHAR_EMPTY),
-                                ResetColor
-                            )?;
-                        };
-                    }
-
-                    stdout().execute(cursor::MoveToNextLine(1))?;
-                }
+                print_field_setup(
+                    self.as_size(),
+                    &self.unavailable,
+                    Some(self.cursor_as_pos()),
+                    RawMode::Enabled,
+                )?;
 
                 Ok(())
             }
@@ -502,7 +622,7 @@ mod app_terminal {
             }
 
             fn toggle_under_cursor(&mut self) {
-                let entry = (self.cursor.0 .0, self.cursor.1 .0);
+                let entry = self.cursor_as_pos();
                 if self.unavailable.contains(&entry) {
                     self.unavailable.remove(&entry);
                 } else {
@@ -510,6 +630,73 @@ mod app_terminal {
                 };
             }
         }
+    }
+
+    impl Configuration {
+        pub fn print_field(&self) -> Result<()> {
+            stdout().execute(Print("Field:\n\n"))?;
+            print_field_setup(self.size, &self.unavailable, None, RawMode::Disabled)?;
+            stdout().execute(Print("\n"))?;
+            Ok(())
+        }
+    }
+
+    enum RawMode {
+        Enabled,
+        Disabled,
+    }
+
+    fn print_field_setup(
+        size: Size,
+        unavailable: &HashSet<Pos>,
+        cursor: Option<Pos>,
+        raw_mode: RawMode,
+    ) -> Result<()> {
+        for row in 0..size.rows {
+            match raw_mode {
+                RawMode::Enabled => execute!(stdout(), cursor::MoveRight(2))?,
+                RawMode::Disabled => execute!(stdout(), Print("  "))?,
+            }
+
+            for col in 0..size.cols {
+                let under_cursor = cursor
+                    .map(|pos| (row, col) == (pos.row, pos.col))
+                    .unwrap_or(false);
+
+                if unavailable.contains(&Pos::new(row, col)) {
+                    execute!(
+                        stdout(),
+                        SetBackgroundColor(if under_cursor {
+                            Color::DarkRed
+                        } else {
+                            Color::White
+                        }),
+                        SetAttribute(Attribute::Bold),
+                        SetForegroundColor(Color::DarkRed),
+                        Print(CHAR_UNAVAILABLE),
+                        ResetColor
+                    )?;
+                } else {
+                    execute!(
+                        stdout(),
+                        SetBackgroundColor(if under_cursor {
+                            Color::DarkGrey
+                        } else {
+                            Color::White
+                        }),
+                        Print(CHAR_EMPTY),
+                        ResetColor
+                    )?;
+                };
+            }
+
+            match raw_mode {
+                RawMode::Enabled => execute!(stdout(), cursor::MoveToNextLine(1))?,
+                RawMode::Disabled => execute!(stdout(), Print("\n"))?,
+            }
+        }
+
+        Ok(())
     }
 
     pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Result<()> {
@@ -537,7 +724,7 @@ mod app_terminal {
         }
 
         struct TetroViewsComposer {
-            views: HashMap<PlacedTetro, View>,
+            views: HashMap<PlacedTetroInBoundaries, View>,
             colors: Vec<Color>,
             attrs: Vec<Option<Attribute>>,
         }
@@ -557,7 +744,7 @@ mod app_terminal {
                 }
             }
 
-            fn update(mut self, item: PlacedTetro) -> Self {
+            fn update(mut self, item: PlacedTetroInBoundaries) -> Self {
                 let idx = self.views.len();
 
                 let sym = char::from_u32(
@@ -589,21 +776,16 @@ mod app_terminal {
                 acc.update(item.clone())
             });
 
-        let mut grid = Grid::init(conf.size.0, conf.size.1, View::Empty);
+        let mut grid = Grid::init(conf.size.rows, conf.size.cols, View::Empty);
 
         for item in result.placement.iter() {
             let view = views.get(item).unwrap();
-            let PlacedTetro {
-                position: pos,
-                tetro,
-            } = item;
-            for i in tetro.iter() {
-                let Pos { row, col } = pos.add(i);
-                grid[row][col] = (*view).clone();
+            for i in item.iter_relative_to_place() {
+                grid[i.row][i.col] = (*view).clone();
             }
         }
 
-        for (row, col) in conf.unavailable.iter() {
+        for Pos { row, col } in conf.unavailable.iter() {
             grid[*row][*col] = View::Unavailable
         }
 
@@ -669,13 +851,19 @@ impl CollectStats for Stats {
     fn recursions_inc(&mut self) {
         self.recursions += 1;
 
-        if self.recursions % 10_000 == 0 {
-            println!(
-                "recursions: {}, time: {:.2?}, results: {}",
-                self.recursions,
-                self.start.elapsed(),
-                self.results
-            );
+        if self.recursions % 100_000 == 0 {
+            stdout()
+                .execute(terminal::Clear(terminal::ClearType::CurrentLine))
+                .unwrap()
+                .execute(cursor::MoveLeft(100))
+                .unwrap()
+                .execute(Print(format!(
+                    "recursions: {}, time: {:.2?}, results: {}",
+                    self.recursions,
+                    self.start.elapsed(),
+                    self.results
+                )))
+                .unwrap();
         }
     }
 
@@ -690,6 +878,8 @@ fn main() -> Result<()> {
     let conf = app_terminal::live_configuration::State::new(4, 4)
         .live()?
         .into_configuration();
+
+    conf.print_field()?;
 
     let mut stats = Stats::new();
     let placements = conf.brute_force(&mut stats);
