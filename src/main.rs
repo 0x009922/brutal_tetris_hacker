@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     conf.print_field()?;
 
     let mut stats = Stats::new();
-    let placements = conf.brute_force(&mut stats);
+    let placements = conf.run(&mut stats);
     let elapsed = stats.start.elapsed();
 
     if !args.no_print_placements {

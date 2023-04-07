@@ -3,15 +3,15 @@ use crate::util::Size;
 use std::ops::Add;
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct Tetro {
+pub struct Tetra {
     positions: [Pos; 4],
     size: Size,
     col_shift: usize,
 }
 
-const TETRO_COUNT: usize = 19;
+const TETRAS_COUNT: usize = 19;
 
-const fn const_tetro(positions: [(usize, usize); 4], col_shift: usize) -> Tetro {
+const fn const_tetra(positions: [(usize, usize); 4], col_shift: usize) -> Tetra {
     const fn transform_pos((row, col): (usize, usize)) -> Pos {
         Pos { row, col }
     }
@@ -39,7 +39,7 @@ const fn const_tetro(positions: [(usize, usize); 4], col_shift: usize) -> Tetro 
         size
     };
 
-    Tetro {
+    Tetra {
         positions: [
             transform_pos(positions[0]),
             transform_pos(positions[1]),
@@ -51,40 +51,40 @@ const fn const_tetro(positions: [(usize, usize); 4], col_shift: usize) -> Tetro 
     }
 }
 
-macro_rules! tetro {
+macro_rules! tetra {
     ($a:expr, $b:expr, $c:expr, $d:expr, $shift:expr) => {
-        const_tetro([$a, $b, $c, $d], $shift)
+        const_tetra([$a, $b, $c, $d], $shift)
     };
 }
 
-const TETROS: [Tetro; TETRO_COUNT] = [
-    tetro!((0, 0), (0, 1), (1, 0), (1, 1), 0),
-    tetro!((0, 0), (0, 1), (0, 2), (0, 3), 0),
-    tetro!((0, 0), (1, 0), (2, 0), (3, 0), 0),
-    tetro!((0, 0), (0, 1), (0, 2), (1, 1), 0),
-    tetro!((0, 0), (1, 0), (1, 1), (2, 0), 0),
-    tetro!((0, 1), (1, 0), (1, 1), (1, 2), 1),
-    tetro!((0, 1), (1, 0), (1, 1), (2, 1), 1),
-    tetro!((0, 0), (0, 1), (0, 2), (1, 0), 0),
-    tetro!((0, 0), (1, 0), (2, 0), (2, 1), 0),
-    tetro!((0, 2), (1, 0), (1, 1), (1, 2), 2),
-    tetro!((0, 0), (0, 1), (1, 1), (2, 1), 0),
-    tetro!((0, 0), (0, 1), (0, 2), (1, 2), 0),
-    tetro!((0, 1), (1, 1), (2, 0), (2, 1), 1),
-    tetro!((0, 0), (1, 0), (1, 1), (1, 2), 0),
-    tetro!((0, 0), (0, 1), (1, 0), (2, 0), 0),
-    tetro!((0, 1), (0, 2), (1, 0), (1, 1), 1),
-    tetro!((0, 0), (1, 0), (1, 1), (2, 1), 0),
-    tetro!((0, 0), (0, 1), (1, 1), (1, 2), 0),
-    tetro!((0, 1), (1, 0), (1, 1), (2, 0), 1),
+const TETROS: [Tetra; TETRAS_COUNT] = [
+    tetra!((0, 0), (0, 1), (1, 0), (1, 1), 0),
+    tetra!((0, 0), (0, 1), (0, 2), (0, 3), 0),
+    tetra!((0, 0), (1, 0), (2, 0), (3, 0), 0),
+    tetra!((0, 0), (0, 1), (0, 2), (1, 1), 0),
+    tetra!((0, 0), (1, 0), (1, 1), (2, 0), 0),
+    tetra!((0, 1), (1, 0), (1, 1), (1, 2), 1),
+    tetra!((0, 1), (1, 0), (1, 1), (2, 1), 1),
+    tetra!((0, 0), (0, 1), (0, 2), (1, 0), 0),
+    tetra!((0, 0), (1, 0), (2, 0), (2, 1), 0),
+    tetra!((0, 2), (1, 0), (1, 1), (1, 2), 2),
+    tetra!((0, 0), (0, 1), (1, 1), (2, 1), 0),
+    tetra!((0, 0), (0, 1), (0, 2), (1, 2), 0),
+    tetra!((0, 1), (1, 1), (2, 0), (2, 1), 1),
+    tetra!((0, 0), (1, 0), (1, 1), (1, 2), 0),
+    tetra!((0, 0), (0, 1), (1, 0), (2, 0), 0),
+    tetra!((0, 1), (0, 2), (1, 0), (1, 1), 1),
+    tetra!((0, 0), (1, 0), (1, 1), (2, 1), 0),
+    tetra!((0, 0), (0, 1), (1, 1), (1, 2), 0),
+    tetra!((0, 1), (1, 0), (1, 1), (2, 0), 1),
 ];
 
 #[cfg(test)]
-pub const I_HORIZONTAL: &Tetro = &TETROS[1];
+pub const I_HORIZONTAL: &Tetra = &TETROS[1];
 #[cfg(test)]
-pub const T_LOOK_LEFT: &Tetro = &TETROS[6];
+pub const T_LOOK_LEFT: &Tetra = &TETROS[6];
 
-impl Tetro {
+impl Tetra {
     pub fn size(&self) -> &Size {
         &self.size
     }
@@ -98,7 +98,7 @@ impl Tetro {
     }
 }
 
-impl IntoIterator for Tetro {
+impl IntoIterator for Tetra {
     type Item = Pos;
     type IntoIter = core::array::IntoIter<Self::Item, 4>;
 
@@ -108,34 +108,34 @@ impl IntoIterator for Tetro {
 }
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct PlacedTetro {
-    pub tetro: &'static Tetro,
+pub struct PlacedTetra {
+    pub tetra: &'static Tetra,
     pub position: Pos,
 }
 
-impl PlacedTetro {
-    pub fn new(tetro: &'static Tetro, position: Pos) -> Self {
-        Self { tetro, position }
+impl PlacedTetra {
+    pub fn new(tetra: &'static Tetra, position: Pos) -> Self {
+        Self { tetra, position }
     }
 }
 
-pub fn static_tetros_iter() -> impl Iterator<Item = &'static Tetro> {
+pub fn static_tetras_iter() -> impl Iterator<Item = &'static Tetra> {
     TETROS.iter()
 }
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct PlacedTetroInBoundaries(PlacedTetro);
+pub struct PlacedTetraInBoundaries(PlacedTetra);
 
-impl PlacedTetroInBoundaries {
-    pub fn in_boundaries(placed: PlacedTetro, boundaries: Size) -> Option<Self> {
-        let PlacedTetro { tetro, position } = placed;
+impl PlacedTetraInBoundaries {
+    pub fn in_boundaries(placed: PlacedTetra, boundaries: Size) -> Option<Self> {
+        let PlacedTetra { tetra, position } = placed;
 
-        let tetro_size = tetro.size();
-        let tetro_col_shift = *tetro.col_shift();
+        let tetra_size = tetra.size();
+        let tetra_col_shift = *tetra.col_shift();
 
-        if tetro_col_shift > position.col
-            || position.col + tetro_size.cols - tetro_col_shift > boundaries.cols
-            || position.row + tetro_size.rows > boundaries.rows
+        if tetra_col_shift > position.col
+            || position.col + tetra_size.cols - tetra_col_shift > boundaries.cols
+            || position.row + tetra_size.rows > boundaries.rows
         {
             return None;
         }
@@ -144,21 +144,21 @@ impl PlacedTetroInBoundaries {
     }
 
     pub fn iter_relative_to_place<'a>(&'a self) -> impl Iterator<Item = Pos> + 'a {
-        let Self(PlacedTetro {
-            tetro,
+        let Self(PlacedTetra {
+            tetra,
             position: relative,
         }) = self;
 
-        tetro.iter().map(|pos| {
+        tetra.iter().map(|pos| {
             let mut pos = pos.add(relative);
-            pos.col -= tetro.col_shift;
+            pos.col -= tetra.col_shift;
             pos
         })
     }
 }
 
-impl From<PlacedTetroInBoundaries> for PlacedTetro {
-    fn from(value: PlacedTetroInBoundaries) -> Self {
+impl From<PlacedTetraInBoundaries> for PlacedTetra {
+    fn from(value: PlacedTetraInBoundaries) -> Self {
         value.0
     }
 }
@@ -170,8 +170,8 @@ mod test {
     #[test]
     fn check_for_3x3() {
         assert!(matches!(
-            PlacedTetroInBoundaries::in_boundaries(
-                PlacedTetro::new(I_HORIZONTAL, Pos::new(0, 0)),
+            PlacedTetraInBoundaries::in_boundaries(
+                PlacedTetra::new(I_HORIZONTAL, Pos::new(0, 0)),
                 Size::new(3, 3)
             ),
             None
@@ -181,8 +181,8 @@ mod test {
     #[test]
     fn check_for_horizontal_i_in_4x4() {
         assert!(matches!(
-            PlacedTetroInBoundaries::in_boundaries(
-                PlacedTetro::new(I_HORIZONTAL, Pos::new(0, 0)),
+            PlacedTetraInBoundaries::in_boundaries(
+                PlacedTetra::new(I_HORIZONTAL, Pos::new(0, 0)),
                 Size::new(4, 4)
             ),
             Some(_)
@@ -192,8 +192,8 @@ mod test {
     #[test]
     fn check_horizontal_i_in_4x4_at_col_1() {
         assert!(matches!(
-            PlacedTetroInBoundaries::in_boundaries(
-                PlacedTetro::new(I_HORIZONTAL, Pos::new(0, 1)),
+            PlacedTetraInBoundaries::in_boundaries(
+                PlacedTetra::new(I_HORIZONTAL, Pos::new(0, 1)),
                 Size::new(4, 4)
             ),
             None
@@ -203,8 +203,8 @@ mod test {
     #[test]
     fn checj_t_at_right_border() {
         assert!(matches!(
-            PlacedTetroInBoundaries::in_boundaries(
-                PlacedTetro::new(T_LOOK_LEFT, Pos::new(0, 2)),
+            PlacedTetraInBoundaries::in_boundaries(
+                PlacedTetra::new(T_LOOK_LEFT, Pos::new(0, 2)),
                 Size::new(3, 3)
             ),
             Some(_)

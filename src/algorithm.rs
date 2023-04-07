@@ -2,10 +2,10 @@ use std::collections::HashSet;
 
 use grid::Grid;
 
-use crate::tetra::{static_tetros_iter, PlacedTetro, PlacedTetroInBoundaries, Tetro};
+use crate::tetra::{static_tetras_iter, PlacedTetra, PlacedTetraInBoundaries, Tetra};
 use crate::util::{Pos, PosInGrid, Size, SizeOf};
 
-pub type Placement = Vec<PlacedTetroInBoundaries>;
+pub type Placement = Vec<PlacedTetraInBoundaries>;
 
 pub struct Configuration {
     pub size: Size,
@@ -17,11 +17,12 @@ impl Configuration {
         Self { size, unavailable }
     }
 
-    pub fn brute_force<S>(&self, stats: &'_ mut S) -> Vec<PlacementResult>
+    pub fn run<S>(&self, stats: &'_ mut S) -> Vec<PlacementResult>
     where
         S: CollectStats,
     {
-        RecursionState::brute_force(self, stats)
+        RecursionState::run(self, stats);
+        Vec::new()
     }
 }
 
@@ -42,7 +43,7 @@ where
     grid: Grid<Cell>,
     how_many_free: usize,
     min_free_cells: usize,
-    stack: Vec<PlacedTetroInBoundaries>,
+    stack: Vec<PlacedTetraInBoundaries>,
     results: Vec<PlacementResult>,
     positions_for_lookup: Vec<Pos>,
     stats: &'a mut S,
@@ -54,7 +55,7 @@ impl<'a, S> RecursionState<'a, S>
 where
     S: CollectStats,
 {
-    fn brute_force(
+    fn run(
         Configuration { size, unavailable }: &Configuration,
         stats: &'a mut S,
     ) -> Vec<PlacementResult> {
@@ -104,46 +105,46 @@ where
         self.stats.recursions_inc();
 
         if self.how_many_free == self.min_free_cells {
-            // self.results.push(PlacementResult {
-            //     placement: self.stack.clone(),
-            //     free: 0,
-            // });
+            self.results.push(PlacementResult {
+                placement: self.stack.clone(),
+                free: 0,
+            });
             self.stats.results_inc();
         }
 
-        for tetro in static_tetros_iter() {
-            if let Some(tetro_in_boundaries) = self.find_any_fit_for(tetro) {
-                self.fill_and_push(tetro_in_boundaries);
+        for tetra in static_tetras_iter() {
+            if let Some(tetra_in_boundaries) = self.find_any_fit_for(tetra) {
+                self.fill_and_push(tetra_in_boundaries);
                 self.recursion();
                 self.pop_and_clear();
             }
         }
     }
 
-    fn fill_and_push(&mut self, tetro: PlacedTetroInBoundaries) {
-        for i in tetro.iter_relative_to_place() {
+    fn fill_and_push(&mut self, tetra: PlacedTetraInBoundaries) {
+        for i in tetra.iter_relative_to_place() {
             self.grid[i.row][i.col] = Cell::Occupied;
             self.how_many_free -= 1;
         }
-        self.stack.push(tetro);
+        self.stack.push(tetra);
         self.update_lookup_cache();
     }
 
     fn pop_and_clear(&mut self) {
-        let placed_tetro = self.stack.pop().unwrap();
-        for i in placed_tetro.iter_relative_to_place() {
+        let placed_tetra = self.stack.pop().unwrap();
+        for i in placed_tetra.iter_relative_to_place() {
             self.grid[i.row][i.col] = Cell::Empty;
             self.how_many_free += 1;
         }
         self.update_lookup_cache();
     }
 
-    fn find_any_fit_for(&self, tetro: &'static Tetro) -> Option<PlacedTetroInBoundaries> {
+    fn find_any_fit_for(&self, tetra: &'static Tetra) -> Option<PlacedTetraInBoundaries> {
         self.positions_for_lookup
             .iter()
             .map(|pos| {
-                PlacedTetroInBoundaries::in_boundaries(
-                    PlacedTetro::new(tetro, *pos),
+                PlacedTetraInBoundaries::in_boundaries(
+                    PlacedTetra::new(tetra, *pos),
                     self.grid.size_of(),
                 )
             })
@@ -159,7 +160,7 @@ where
             .flatten()
     }
 
-    /// should be called after pushing and popping a tetro
+    /// should be called after pushing and popping a tetra
     fn update_lookup_cache(&mut self) {
         let stack_size = self.stack.len();
 

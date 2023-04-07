@@ -1,6 +1,6 @@
 # brutal_tetris_hacker
 
-Brut-forces a NxM field with tetros in order to find optimal placements.
+Brut-forces a NxM field with tetras in order to find optimal placements.
 
 ## Run
 

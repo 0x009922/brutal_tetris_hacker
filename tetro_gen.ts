@@ -70,43 +70,43 @@ xx
 x
 `
 
-interface Tetro {
+interface Tetra {
     items: [number, number][]
     col_shift: number
 }
 
-const tetros: Tetro[] = []
-let last: { tetro: Tetro, y: number } | undefined
+const tetras: Tetra[] = []
+let last: { tetra: Tetra, y: number } | undefined
 
 const lines = raw.split('\n')
 for (const line of lines) {
     const trimmed = line.trimEnd();
     if (trimmed) {
         if (!last) {
-            last = { tetro: { items: [], col_shift: 0 }, y: -1 }
+            last = { tetra: { items: [], col_shift: 0 }, y: -1 }
         }
         last.y ++;
 
         for (let i = 0; i < trimmed.length; i++) {
             if (trimmed[i] !== ' ') {
-                const { tetro } = last
-                if (tetro.items.length === 0) {
-                    tetro.col_shift = i;
+                const { tetra } = last
+                if (tetra.items.length === 0) {
+                    tetra.col_shift = i;
                 }
-                tetro.items.push([last.y, i])
+                tetra.items.push([last.y, i])
             }
         }
 
-        if (last.tetro.items.length > 4) throw new Error(`Too many points in tetro`)
+        if (last.tetra.items.length > 4) throw new Error(`Too many points in tetra`)
     } else {
         if (last) {
-            if (last.tetro.items.length < 4) throw new Error(`Bad tetro: ${last.tetro.items.map(x => `(${x[0]}, ${x[1]})`).join(', ')}`)
-            tetros.push(last.tetro)
+            if (last.tetra.items.length < 4) throw new Error(`Bad tetra: ${last.tetra.items.map(x => `(${x[0]}, ${x[1]})`).join(', ')}`)
+            tetras.push(last.tetra)
             last = undefined
         }
     }
 }
 
-last && tetros.push(last.tetro)
+last && tetras.push(last.tetra)
 
-console.log(tetros.map(x => `tetro!(${x.items.map(([row, col]) => `(${row}, ${col})`).join(', ')}, ${x.col_shift})`).join(',\n'))
+console.log(tetras.map(x => `tetra!(${x.items.map(([row, col]) => `(${row}, ${col})`).join(', ')}, ${x.col_shift})`).join(',\n'))

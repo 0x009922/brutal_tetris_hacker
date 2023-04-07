@@ -16,7 +16,7 @@ use crossterm::{
 use grid::Grid;
 
 use crate::algorithm::{Configuration, PlacementResult};
-use crate::tetra::PlacedTetroInBoundaries;
+use crate::tetra::PlacedTetraInBoundaries;
 use crate::util::{Pos, Size};
 
 pub const CHAR_EMPTY: char = '·';
@@ -244,7 +244,7 @@ pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Resul
     }
 
     struct TetroViewsComposer {
-        views: HashMap<PlacedTetroInBoundaries, View>,
+        views: HashMap<PlacedTetraInBoundaries, View>,
         colors: Vec<Color>,
         attrs: Vec<Option<Attribute>>,
     }
@@ -264,7 +264,7 @@ pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Resul
             }
         }
 
-        fn update(mut self, item: PlacedTetroInBoundaries) -> Self {
+        fn update(mut self, item: PlacedTetraInBoundaries) -> Self {
             let idx = self.views.len();
 
             let sym = char::from_u32(
