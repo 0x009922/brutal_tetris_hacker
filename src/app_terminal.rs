@@ -268,8 +268,8 @@ pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Resul
             let idx = self.views.len();
 
             let sym = char::from_u32(
-                // ASCII 'a'
-                (97 + idx) as u32,
+                // ASCII 'A'
+                (65 + idx) as u32,
             )
             .unwrap();
 
