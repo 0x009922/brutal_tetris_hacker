@@ -21,21 +21,21 @@ impl Configuration {
     where
         S: CollectStats,
     {
-        RecursionState::run(self, stats);
-        Vec::new()
+        RecursionState::run(self, stats)
     }
 }
 
-#[derive(Clone, Copy, derive_more::Display, Debug)]
+#[derive(Clone, Copy, derive_more::DebugCustom)]
 pub enum Cell {
-    #[display(fmt = "-")]
+    #[debug(fmt = "-")]
     Empty,
-    #[display(fmt = "x")]
+    #[debug(fmt = "x")]
     Unavailable,
-    #[display(fmt = "+")]
+    #[debug(fmt = "+")]
     Occupied,
 }
 
+#[derive(Debug)]
 struct RecursionState<'a, S>
 where
     S: CollectStats,
@@ -46,25 +46,28 @@ where
     stack: Vec<PlacedTetraInBoundaries>,
     results: Vec<PlacementResult>,
     positions_for_lookup: Vec<Pos>,
+    initially_unavailable: usize,
     stats: &'a mut S,
 }
 
-const CACHE_EACH_TETROS: usize = 4;
+const CACHE_EACH_TETRAS: usize = 4;
 
 impl<'a, S> RecursionState<'a, S>
 where
     S: CollectStats,
 {
-    fn run(
-        Configuration { size, unavailable }: &Configuration,
-        stats: &'a mut S,
-    ) -> Vec<PlacementResult> {
-        let mut state = RecursionState::new(*size, unavailable, stats);
+    fn run(cfg: &Configuration, stats: &'a mut S) -> Vec<PlacementResult> {
+        let mut state = RecursionState::with_configuration(cfg, stats);
         state.recursion();
         state.results
     }
 
-    fn new(Size { rows, cols }: Size, unavailable: &'_ HashSet<Pos>, stats: &'a mut S) -> Self {
+    fn with_configuration(
+        Configuration { size, unavailable }: &Configuration,
+        stats: &'a mut S,
+    ) -> Self {
+        let (rows, cols) = (size.rows, size.cols);
+
         let mut grid = Grid::init(rows, cols, Cell::Empty);
         let mut how_many_free = rows * cols;
         let mut initially_unavailable = 0;
@@ -97,6 +100,7 @@ where
             results,
             stats,
 
+            initially_unavailable,
             positions_for_lookup: iter_positions,
         }
     }
@@ -162,13 +166,15 @@ where
 
     /// should be called after pushing and popping a tetra
     fn update_lookup_cache(&mut self) {
-        let stack_size = self.stack.len();
-
         let how_many_exclude = {
-            if stack_size % CACHE_EACH_TETROS == 0 {
-                Some(stack_size)
-            } else if (stack_size + 1) % CACHE_EACH_TETROS == 0 {
-                Some(stack_size - (stack_size % CACHE_EACH_TETROS))
+            let stacked = self.stack.len();
+            let cached = (self.grid.cols() * self.grid.rows() - self.initially_unavailable)
+                - self.positions_for_lookup.len();
+
+            if stacked < cached || stacked - cached >= CACHE_EACH_TETRAS {
+                let floor = stacked - stacked % CACHE_EACH_TETRAS;
+                let exclude = floor * 4;
+                Some(exclude)
             } else {
                 None
             }
@@ -179,12 +185,23 @@ where
 
             for row in 0..self.grid.rows() {
                 for col in 0..self.grid.cols() {
-                    if let Cell::Empty = self.grid[row][col] {
-                        if excluded > 0 {
-                            excluded -= 1
-                        } else {
-                            self.positions_for_lookup.push(Pos::new(row, col));
+                    enum Decision {
+                        Add,
+                        Ignore,
+                    }
+
+                    let decision = match self.grid[row][col] {
+                        Cell::Empty => Decision::Add,
+                        Cell::Occupied if excluded > 0 => {
+                            excluded -= 1;
+                            Decision::Ignore
                         }
+                        Cell::Occupied => Decision::Add,
+                        _ => Decision::Ignore,
+                    };
+
+                    if let Decision::Add = decision {
+                        self.positions_for_lookup.push(Pos::new(row, col));
                     }
                 }
             }
@@ -192,6 +209,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct PlacementResult {
     pub placement: Placement,
     pub free: usize,
@@ -201,4 +219,96 @@ pub trait CollectStats {
     fn recursions_inc(&mut self);
 
     fn results_inc(&mut self);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct StatsDummy;
+
+    impl CollectStats for StatsDummy {
+        fn recursions_inc(&mut self) {}
+
+        fn results_inc(&mut self) {}
+    }
+
+    // #[test]
+    mod caching {
+        use super::*;
+        use crate::tetra::I_HORIZONTAL;
+
+        fn config_factory() -> Configuration {
+            Configuration::new(Size::new(8, 8), HashSet::new())
+        }
+
+        impl<'a, S> RecursionState<'a, S>
+        where
+            S: CollectStats,
+        {
+            fn force_fill(&mut self, tetra: &'static Tetra) {
+                self.fill_and_push(self.find_any_fit_for(tetra).unwrap());
+            }
+        }
+
+        #[test]
+        fn all_positions_initially() {
+            let mut stats = StatsDummy;
+            let state = RecursionState::with_configuration(&config_factory(), &mut stats);
+
+            assert_eq!(state.positions_for_lookup.len(), 8 * 8);
+        }
+
+        #[test]
+        fn cache_behaviour() {
+            let mut stats = StatsDummy;
+            let mut state = RecursionState::with_configuration(&config_factory(), &mut stats);
+
+            state.force_fill(&I_HORIZONTAL);
+            state.force_fill(&I_HORIZONTAL);
+            state.force_fill(&I_HORIZONTAL);
+
+            assert_eq!(state.positions_for_lookup.len(), 8 * 8);
+
+            state.force_fill(&I_HORIZONTAL);
+
+            assert_eq!(state.positions_for_lookup.len(), 8 * 8 - 4 * 4);
+
+            state.force_fill(&I_HORIZONTAL);
+
+            // still
+            assert_eq!(state.positions_for_lookup.len(), 8 * 8 - 4 * 4);
+
+            state.pop_and_clear();
+            state.pop_and_clear();
+
+            assert_eq!(state.positions_for_lookup.len(), 8 * 8);
+        }
+    }
+
+    #[test]
+    fn results_count_for_empty_4x4() {
+        let cfg = Configuration::new(Size::new(4, 4), HashSet::new());
+
+        let results = cfg.run(&mut StatsDummy);
+
+        assert_eq!(results.len(), 267);
+    }
+
+    #[test]
+    fn results_count_for_non_empty_6x6() {
+        let unavailable = {
+            let mut set = HashSet::new();
+            for (row, col) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+                set.insert(Pos::new(row, col));
+            }
+            set
+        };
+        let cfg = Configuration::new(Size::new(6, 6), unavailable);
+
+        let results = cfg.run(&mut StatsDummy);
+
+        assert_eq!(results.len(), 44);
+    }
 }
