@@ -1,20 +1,35 @@
 mod algorithm;
 mod app_terminal;
+mod parse_field;
 mod tetra;
 mod util;
 
 use std::io::stdout;
+use std::num::NonZeroUsize;
 
 use clap::Parser;
 use crossterm::style::Print;
-use crossterm::{cursor, terminal, ExecutableCommand, Result};
+use crossterm::{cursor, terminal, ExecutableCommand};
 
 use algorithm::CollectStats;
 
 #[derive(Parser)]
 struct Args {
+    /// The limit of the generated results.
     #[arg(long)]
-    no_print_placements: bool,
+    results_limit: Option<NonZeroUsize>,
+    /// Read the field from STDIN.
+    ///
+    /// Use `--stdin-char-empty` and `--stdin-char-busy` to configure characters recognition. Any
+    /// other characters are not allowed. The length of each line should be fixed.
+    #[arg(long)]
+    stdin: bool,
+    /// In case of reading the field from STDIN, which character treat as an empty cell
+    #[arg(long, default_value_t = '-')]
+    stdin_char_empty: char,
+    /// In case of reading the field from STDIN, which character treat as an unavailable cell
+    #[arg(long, default_value_t = 'x')]
+    stdin_char_busy: char,
 }
 
 struct Stats {
@@ -58,12 +73,37 @@ impl CollectStats for Stats {
     }
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), color_eyre::Report> {
     let args = Args::parse();
 
-    let conf = app_terminal::live_configuration::State::new(4, 4)
-        .live()?
-        .into_configuration();
+    let conf = {
+        let mut conf = if args.stdin {
+            use std::io::{self, Read};
+
+            let mut input = String::new();
+            io::stdin().read_to_string(&mut input).unwrap();
+
+            let conf = parse_field::Parser::new(args.stdin_char_empty, args.stdin_char_busy)
+                .parse(input)
+                .map(|parse_field::ParsedField { size, unavailable }| {
+                    algorithm::Configuration::new(size, unavailable)
+                })
+                .map_err(|err| {
+                    color_eyre::eyre::eyre!("Failed to parse field from STDIN: {err}")
+                })?;
+
+            conf
+        } else {
+            app_terminal::live_configuration::State::new(4, 4)
+                .live()?
+                .into_configuration()
+        };
+
+        if let Some(limit) = args.results_limit {
+            conf = conf.with_results_limit(limit);
+        }
+        conf
+    };
 
     conf.print_field()?;
 
@@ -71,11 +111,9 @@ fn main() -> Result<()> {
     let placements = conf.run(&mut stats);
     let elapsed = stats.start.elapsed();
 
-    if !args.no_print_placements {
-        for item in placements.iter() {
-            app_terminal::report_placement(item, &conf)?;
-            stdout().execute(Print("\n"))?;
-        }
+    for item in placements.iter() {
+        app_terminal::report_placement(item, &conf)?;
+        stdout().execute(Print("\n"))?;
     }
 
     stdout().execute(Print(format!(

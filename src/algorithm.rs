@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::num::NonZeroUsize;
 
 use grid::Grid;
 
@@ -8,13 +9,26 @@ use crate::util::{Pos, PosInGrid, Size, SizeOf};
 pub type Placement = Vec<PlacedTetraInBoundaries>;
 
 pub struct Configuration {
+    /// Size of the grid
     pub size: Size,
+    /// What cells are unavailable to put Tetras into
     pub unavailable: HashSet<Pos>,
+    /// How many results to generate
+    pub results_limit: Option<NonZeroUsize>,
 }
 
 impl Configuration {
     pub fn new(size: Size, unavailable: HashSet<Pos>) -> Self {
-        Self { size, unavailable }
+        Self {
+            size,
+            unavailable,
+            results_limit: None,
+        }
+    }
+
+    pub fn with_results_limit(mut self, value: NonZeroUsize) -> Self {
+        self.results_limit = Some(value);
+        self
     }
 
     pub fn run<S>(&self, stats: &'_ mut S) -> Vec<PlacementResult>
@@ -29,10 +43,24 @@ impl Configuration {
 pub enum Cell {
     #[debug(fmt = "-")]
     Empty,
-    #[debug(fmt = "x")]
+    #[debug(fmt = "#")]
     Unavailable,
     #[debug(fmt = "+")]
     Occupied,
+}
+
+struct DebugGrid<'a>(&'a Grid<Cell>);
+
+impl std::fmt::Debug for DebugGrid<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for row in 0..self.0.rows() {
+            for col in 0..self.0.cols() {
+                self.0[row][col].fmt(f)?;
+            }
+            f.write_str("\n")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -42,12 +70,20 @@ where
 {
     grid: Grid<Cell>,
     how_many_free: usize,
-    min_free_cells: usize,
     stack: Vec<PlacedTetraInBoundaries>,
     results: Vec<PlacementResult>,
     positions_for_lookup: Vec<Pos>,
     initially_unavailable: usize,
     stats: &'a mut S,
+
+    results_limit: Option<NonZeroUsize>,
+
+    acceptance_threshold: usize,
+}
+
+enum RecursionResult {
+    Continue,
+    Halt,
 }
 
 const CACHE_EACH_TETRAS: usize = 4;
@@ -63,7 +99,11 @@ where
     }
 
     fn with_configuration(
-        Configuration { size, unavailable }: &Configuration,
+        Configuration {
+            size,
+            unavailable,
+            results_limit,
+        }: &Configuration,
         stats: &'a mut S,
     ) -> Self {
         let (rows, cols) = (size.rows, size.cols);
@@ -77,6 +117,8 @@ where
             how_many_free -= 1;
         }
         let min_free_cells = (cols * rows - initially_unavailable) % 4;
+        let acceptance_threshold =
+            ((how_many_free - min_free_cells) as f64).powf(0.5).floor() as usize;
 
         let stack = Vec::with_capacity(cols * rows);
         let results = Vec::new();
@@ -94,7 +136,7 @@ where
         Self {
             grid,
             how_many_free,
-            min_free_cells,
+            acceptance_threshold,
 
             stack,
             results,
@@ -102,27 +144,43 @@ where
 
             initially_unavailable,
             positions_for_lookup: iter_positions,
+
+            results_limit: *results_limit,
         }
     }
 
-    fn recursion(&mut self) {
+    fn recursion(&mut self) -> RecursionResult {
         self.stats.recursions_inc();
 
-        if self.how_many_free == self.min_free_cells {
+        let mut was_any_fit = false;
+
+        for tetra in static_tetras_iter() {
+            if let Some(tetra_in_boundaries) = self.find_any_fit_for(tetra) {
+                was_any_fit = true;
+                self.fill_and_push(tetra_in_boundaries);
+                match self.recursion() {
+                    x @ RecursionResult::Halt => return x,
+                    RecursionResult::Continue => {}
+                }
+                self.pop_and_clear();
+            }
+        }
+
+        if !was_any_fit && self.how_many_free < self.acceptance_threshold {
             self.results.push(PlacementResult {
                 placement: self.stack.clone(),
                 free: 0,
             });
             self.stats.results_inc();
-        }
 
-        for tetra in static_tetras_iter() {
-            if let Some(tetra_in_boundaries) = self.find_any_fit_for(tetra) {
-                self.fill_and_push(tetra_in_boundaries);
-                self.recursion();
-                self.pop_and_clear();
+            if let Some(limit) = self.results_limit {
+                if self.results.len() == limit.get() {
+                    return RecursionResult::Halt;
+                }
             }
         }
+
+        RecursionResult::Continue
     }
 
     fn fill_and_push(&mut self, tetra: PlacedTetraInBoundaries) {
