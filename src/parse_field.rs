@@ -36,8 +36,8 @@ pub struct Parser {
 impl Parser {
     pub fn new(char_empty: char, char_busy: char) -> Self {
         Self {
-            char_busy,
             char_empty,
+            char_busy,
         }
     }
 

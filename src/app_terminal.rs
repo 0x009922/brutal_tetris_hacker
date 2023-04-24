@@ -23,7 +23,11 @@ pub const CHAR_EMPTY: char = '·';
 pub const CHAR_UNAVAILABLE: char = '×';
 
 pub mod live_configuration {
-    use super::*;
+    use super::{
+        cursor, event, print_field_setup, stdout, terminal, Clear, ClearType, Configuration,
+        EnterAlternateScreen, Event, ExecutableCommand, HashSet, LeaveAlternateScreen, Pos, Print,
+        RawMode, Result, Size,
+    };
 
     struct Bounded<const N: usize, const M: usize>(usize);
 
@@ -59,15 +63,15 @@ pub mod live_configuration {
         }
 
         pub fn live(mut self) -> Result<Self> {
-            stdout().execute(EnterAlternateScreen)?;
-            terminal::enable_raw_mode().unwrap();
-
-            self.print()?;
-
             enum LoopResult {
                 Terminate,
                 Proceed,
             }
+
+            stdout().execute(EnterAlternateScreen)?;
+            terminal::enable_raw_mode().unwrap();
+
+            self.print()?;
 
             let loop_result = loop {
                 if let Event::Key(event::KeyEvent { code, .. }) = event::read().unwrap() {
@@ -130,7 +134,7 @@ pub mod live_configuration {
                 self.as_size(),
                 &self.unavailable,
                 Some(self.cursor_as_pos()),
-                RawMode::Enabled,
+                &RawMode::Enabled,
             )?;
 
             Ok(())
@@ -155,7 +159,7 @@ pub mod live_configuration {
 impl Configuration {
     pub fn print_field(&self) -> Result<()> {
         stdout().execute(Print("Field:\n\n"))?;
-        print_field_setup(self.size, &self.unavailable, None, RawMode::Disabled)?;
+        print_field_setup(self.size, &self.unavailable, None, &RawMode::Disabled)?;
         stdout().execute(Print("\n"))?;
         Ok(())
     }
@@ -170,7 +174,7 @@ fn print_field_setup(
     size: Size,
     unavailable: &HashSet<Pos>,
     cursor: Option<Pos>,
-    raw_mode: RawMode,
+    raw_mode: &RawMode,
 ) -> Result<()> {
     for row in 0..size.rows {
         match raw_mode {
@@ -179,9 +183,7 @@ fn print_field_setup(
         }
 
         for col in 0..size.cols {
-            let under_cursor = cursor
-                .map(|pos| (row, col) == (pos.row, pos.col))
-                .unwrap_or(false);
+            let under_cursor = cursor.map_or(false, |pos| (row, col) == (pos.row, pos.col));
 
             if unavailable.contains(&Pos::new(row, col)) {
                 execute!(
@@ -298,15 +300,15 @@ pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Resul
 
     let mut grid = Grid::init(conf.size.rows, conf.size.cols, View::Empty);
 
-    for item in result.placement.iter() {
+    for item in &result.placement {
         let view = views.get(item).unwrap();
         for i in item.iter_relative_to_place() {
             grid[i.row][i.col] = (*view).clone();
         }
     }
 
-    for Pos { row, col } in conf.unavailable.iter() {
-        grid[*row][*col] = View::Unavailable
+    for Pos { row, col } in &conf.unavailable {
+        grid[*row][*col] = View::Unavailable;
     }
 
     for row in 0..grid.rows() {

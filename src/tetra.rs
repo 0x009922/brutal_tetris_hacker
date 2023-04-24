@@ -1,7 +1,6 @@
 use super::util::Pos;
 use crate::util::Size;
-use arrayref::{array_mut_ref, array_ref};
-use rand::seq::SliceRandom;
+
 use std::ops::Add;
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -121,10 +120,6 @@ impl PlacedTetra {
     }
 }
 
-pub fn static_tetras_iter() -> impl Iterator<Item = &'static Tetra> {
-    TETRAS.iter()
-}
-
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct PlacedTetraInBoundaries(PlacedTetra);
 
@@ -145,7 +140,7 @@ impl PlacedTetraInBoundaries {
         Some(Self(placed))
     }
 
-    pub fn iter_relative_to_place<'a>(&'a self) -> impl Iterator<Item = Pos> + 'a {
+    pub fn iter_relative_to_place(&self) -> impl Iterator<Item = Pos> + '_ {
         let Self(PlacedTetra {
             tetra,
             position: relative,

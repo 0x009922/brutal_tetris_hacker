@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 
 use grid::Grid;
 
-use crate::tetra::{static_tetras_iter, PlacedTetra, PlacedTetraInBoundaries, RandomTetras, Tetra};
+use crate::tetra::{PlacedTetra, PlacedTetraInBoundaries, RandomTetras, Tetra};
 use crate::util::{Pos, PosInGrid, Size, SizeOf};
 
 pub type Placement = Vec<PlacedTetraInBoundaries>;
@@ -94,9 +94,9 @@ where
     S: CollectStats,
 {
     fn run(cfg: &Configuration, stats: &'a mut S) -> Vec<PlacementResult> {
-        let mut state = RecursionState::with_configuration(cfg, stats);
-        state.recursion();
-        state.results
+        let mut recursion = RecursionState::with_configuration(cfg, stats);
+        recursion.recursion();
+        recursion.results
     }
 
     fn with_configuration(
@@ -129,7 +129,7 @@ where
         for row in 0..rows {
             for col in 0..cols {
                 if let Cell::Empty = grid[row][col] {
-                    iter_positions.push(Pos { row, col })
+                    iter_positions.push(Pos { row, col });
                 }
             }
         }
@@ -251,13 +251,12 @@ where
                     }
 
                     let decision = match self.grid[row][col] {
-                        Cell::Empty => Decision::Add,
                         Cell::Occupied if excluded > 0 => {
                             excluded -= 1;
                             Decision::Ignore
                         }
-                        Cell::Occupied => Decision::Add,
-                        _ => Decision::Ignore,
+                        Cell::Occupied | Cell::Empty => Decision::Add,
+                        Cell::Unavailable => Decision::Ignore,
                     };
 
                     if let Decision::Add = decision {
@@ -315,35 +314,35 @@ mod tests {
         #[test]
         fn all_positions_initially() {
             let mut stats = StatsDummy;
-            let state = RecursionState::with_configuration(&config_factory(), &mut stats);
+            let rec = RecursionState::with_configuration(&config_factory(), &mut stats);
 
-            assert_eq!(state.positions_for_lookup.len(), 8 * 8);
+            assert_eq!(rec.positions_for_lookup.len(), 8 * 8);
         }
 
         #[test]
         fn cache_behaviour() {
             let mut stats = StatsDummy;
-            let mut state = RecursionState::with_configuration(&config_factory(), &mut stats);
+            let mut rec = RecursionState::with_configuration(&config_factory(), &mut stats);
 
-            state.force_fill(&I_HORIZONTAL);
-            state.force_fill(&I_HORIZONTAL);
-            state.force_fill(&I_HORIZONTAL);
+            rec.force_fill(I_HORIZONTAL);
+            rec.force_fill(I_HORIZONTAL);
+            rec.force_fill(I_HORIZONTAL);
 
-            assert_eq!(state.positions_for_lookup.len(), 8 * 8);
+            assert_eq!(rec.positions_for_lookup.len(), 8 * 8);
 
-            state.force_fill(&I_HORIZONTAL);
+            rec.force_fill(I_HORIZONTAL);
 
-            assert_eq!(state.positions_for_lookup.len(), 8 * 8 - 4 * 4);
+            assert_eq!(rec.positions_for_lookup.len(), 8 * 8 - 4 * 4);
 
-            state.force_fill(&I_HORIZONTAL);
+            rec.force_fill(I_HORIZONTAL);
 
             // still
-            assert_eq!(state.positions_for_lookup.len(), 8 * 8 - 4 * 4);
+            assert_eq!(rec.positions_for_lookup.len(), 8 * 8 - 4 * 4);
 
-            state.pop_and_clear();
-            state.pop_and_clear();
+            rec.pop_and_clear();
+            rec.pop_and_clear();
 
-            assert_eq!(state.positions_for_lookup.len(), 8 * 8);
+            assert_eq!(rec.positions_for_lookup.len(), 8 * 8);
         }
     }
 

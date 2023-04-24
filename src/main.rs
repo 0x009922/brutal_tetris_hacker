@@ -83,16 +83,12 @@ fn main() -> Result<(), color_eyre::Report> {
             let mut input = String::new();
             io::stdin().read_to_string(&mut input).unwrap();
 
-            let conf = parse_field::Parser::new(args.stdin_char_empty, args.stdin_char_busy)
+            parse_field::Parser::new(args.stdin_char_empty, args.stdin_char_busy)
                 .parse(input)
                 .map(|parse_field::ParsedField { size, unavailable }| {
                     algorithm::Configuration::new(size, unavailable)
                 })
-                .map_err(|err| {
-                    color_eyre::eyre::eyre!("Failed to parse field from STDIN: {err}")
-                })?;
-
-            conf
+                .map_err(|err| color_eyre::eyre::eyre!("Failed to parse field from STDIN: {err}"))?
         } else {
             app_terminal::live_configuration::State::new(4, 4)
                 .live()?
@@ -111,7 +107,7 @@ fn main() -> Result<(), color_eyre::Report> {
     let placements = conf.run(&mut stats);
     let elapsed = stats.start.elapsed();
 
-    for item in placements.iter() {
+    for item in &placements {
         app_terminal::report_placement(item, &conf)?;
         stdout().execute(Print("\n"))?;
     }
