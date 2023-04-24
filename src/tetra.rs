@@ -1,5 +1,7 @@
 use super::util::Pos;
 use crate::util::Size;
+use arrayref::{array_mut_ref, array_ref};
+use rand::seq::SliceRandom;
 use std::ops::Add;
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -57,7 +59,7 @@ macro_rules! tetra {
     };
 }
 
-const TETROS: [Tetra; TETRAS_COUNT] = [
+const TETRAS: [Tetra; TETRAS_COUNT] = [
     tetra!((0, 0), (0, 1), (1, 0), (1, 1), 0),
     tetra!((0, 0), (0, 1), (0, 2), (0, 3), 0),
     tetra!((0, 0), (1, 0), (2, 0), (3, 0), 0),
@@ -80,9 +82,9 @@ const TETROS: [Tetra; TETRAS_COUNT] = [
 ];
 
 #[cfg(test)]
-pub const I_HORIZONTAL: &Tetra = &TETROS[1];
+pub const I_HORIZONTAL: &Tetra = &TETRAS[1];
 #[cfg(test)]
-pub const T_LOOK_LEFT: &Tetra = &TETROS[6];
+pub const T_LOOK_LEFT: &Tetra = &TETRAS[6];
 
 impl Tetra {
     pub fn size(&self) -> &Size {
@@ -120,7 +122,7 @@ impl PlacedTetra {
 }
 
 pub fn static_tetras_iter() -> impl Iterator<Item = &'static Tetra> {
-    TETROS.iter()
+    TETRAS.iter()
 }
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -160,6 +162,32 @@ impl PlacedTetraInBoundaries {
 impl From<PlacedTetraInBoundaries> for PlacedTetra {
     fn from(value: PlacedTetraInBoundaries) -> Self {
         value.0
+    }
+}
+
+/// Yields finite shuffles tetra iterators.
+///
+/// ```
+/// let mut generator = RandomTetras::new();
+/// let mut tetras = generator.finite_iter();
+/// assert!(matches!(tetras.next(), Some(Tetra { .. })));
+/// ```
+#[derive(Debug)]
+pub struct RandomTetras {
+    rng: rand::rngs::ThreadRng,
+}
+
+impl RandomTetras {
+    pub fn new() -> Self {
+        let rng = rand::thread_rng();
+        Self { rng }
+    }
+
+    pub fn finite_iter(&mut self) -> impl Iterator<Item = &'static Tetra> {
+        use rand::Rng;
+
+        let tetras = array_macro::array![_ => self.rng.gen_range(0..TETRAS_COUNT); TETRAS_COUNT];
+        tetras.into_iter().map(|idx| &TETRAS[idx])
     }
 }
 

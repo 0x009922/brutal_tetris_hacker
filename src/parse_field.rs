@@ -64,8 +64,6 @@ impl Parser {
                 });
             }
 
-            let mut cols_this_line = 0;
-
             for (col, char) in line.chars().enumerate() {
                 if char == self.char_busy {
                     unavailable.insert(Pos::new(row, col));
@@ -77,8 +75,6 @@ impl Parser {
                         char_busy: self.char_busy,
                     });
                 }
-
-                cols_this_line += 1;
             }
 
             rows += 1;

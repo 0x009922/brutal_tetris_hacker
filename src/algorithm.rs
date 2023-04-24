@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 
 use grid::Grid;
 
-use crate::tetra::{static_tetras_iter, PlacedTetra, PlacedTetraInBoundaries, Tetra};
+use crate::tetra::{static_tetras_iter, PlacedTetra, PlacedTetraInBoundaries, RandomTetras, Tetra};
 use crate::util::{Pos, PosInGrid, Size, SizeOf};
 
 pub type Placement = Vec<PlacedTetraInBoundaries>;
@@ -79,6 +79,7 @@ where
     results_limit: Option<NonZeroUsize>,
 
     acceptance_threshold: usize,
+    random_tetras: RandomTetras,
 }
 
 enum RecursionResult {
@@ -146,6 +147,7 @@ where
             positions_for_lookup: iter_positions,
 
             results_limit: *results_limit,
+            random_tetras: RandomTetras::new(),
         }
     }
 
@@ -154,7 +156,7 @@ where
 
         let mut was_any_fit = false;
 
-        for tetra in static_tetras_iter() {
+        for tetra in self.random_tetras.finite_iter() {
             if let Some(tetra_in_boundaries) = self.find_any_fit_for(tetra) {
                 was_any_fit = true;
                 self.fill_and_push(tetra_in_boundaries);
