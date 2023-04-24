@@ -109,23 +109,23 @@ impl IntoIterator for Tetra {
 }
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct PlacedTetra {
+pub struct Placed {
     pub tetra: &'static Tetra,
     pub position: Pos,
 }
 
-impl PlacedTetra {
+impl Placed {
     pub fn new(tetra: &'static Tetra, position: Pos) -> Self {
         Self { tetra, position }
     }
 }
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct PlacedTetraInBoundaries(PlacedTetra);
+pub struct PlacedBoundariesChecked(Placed);
 
-impl PlacedTetraInBoundaries {
-    pub fn in_boundaries(placed: PlacedTetra, boundaries: Size) -> Option<Self> {
-        let PlacedTetra { tetra, position } = placed;
+impl PlacedBoundariesChecked {
+    pub fn in_boundaries(placed: Placed, boundaries: Size) -> Option<Self> {
+        let Placed { tetra, position } = placed;
 
         let tetra_size = tetra.size();
         let tetra_col_shift = *tetra.col_shift();
@@ -141,7 +141,7 @@ impl PlacedTetraInBoundaries {
     }
 
     pub fn iter_relative_to_place(&self) -> impl Iterator<Item = Pos> + '_ {
-        let Self(PlacedTetra {
+        let Self(Placed {
             tetra,
             position: relative,
         }) = self;
@@ -154,13 +154,13 @@ impl PlacedTetraInBoundaries {
     }
 }
 
-impl From<PlacedTetraInBoundaries> for PlacedTetra {
-    fn from(value: PlacedTetraInBoundaries) -> Self {
+impl From<PlacedBoundariesChecked> for Placed {
+    fn from(value: PlacedBoundariesChecked) -> Self {
         value.0
     }
 }
 
-/// Yields finite shuffles tetra iterators.
+/// Yields finite shuffled tetra iterators.
 ///
 /// ```
 /// let mut generator = RandomTetras::new();
@@ -168,11 +168,11 @@ impl From<PlacedTetraInBoundaries> for PlacedTetra {
 /// assert!(matches!(tetras.next(), Some(Tetra { .. })));
 /// ```
 #[derive(Debug)]
-pub struct RandomTetras {
+pub struct Shuffler {
     rng: rand::rngs::ThreadRng,
 }
 
-impl RandomTetras {
+impl Shuffler {
     pub fn new() -> Self {
         let rng = rand::thread_rng();
         Self { rng }
@@ -193,8 +193,8 @@ mod test {
     #[test]
     fn check_for_3x3() {
         assert!(matches!(
-            PlacedTetraInBoundaries::in_boundaries(
-                PlacedTetra::new(I_HORIZONTAL, Pos::new(0, 0)),
+            PlacedBoundariesChecked::in_boundaries(
+                Placed::new(I_HORIZONTAL, Pos::new(0, 0)),
                 Size::new(3, 3)
             ),
             None
@@ -204,8 +204,8 @@ mod test {
     #[test]
     fn check_for_horizontal_i_in_4x4() {
         assert!(matches!(
-            PlacedTetraInBoundaries::in_boundaries(
-                PlacedTetra::new(I_HORIZONTAL, Pos::new(0, 0)),
+            PlacedBoundariesChecked::in_boundaries(
+                Placed::new(I_HORIZONTAL, Pos::new(0, 0)),
                 Size::new(4, 4)
             ),
             Some(_)
@@ -215,8 +215,8 @@ mod test {
     #[test]
     fn check_horizontal_i_in_4x4_at_col_1() {
         assert!(matches!(
-            PlacedTetraInBoundaries::in_boundaries(
-                PlacedTetra::new(I_HORIZONTAL, Pos::new(0, 1)),
+            PlacedBoundariesChecked::in_boundaries(
+                Placed::new(I_HORIZONTAL, Pos::new(0, 1)),
                 Size::new(4, 4)
             ),
             None
@@ -226,8 +226,8 @@ mod test {
     #[test]
     fn checj_t_at_right_border() {
         assert!(matches!(
-            PlacedTetraInBoundaries::in_boundaries(
-                PlacedTetra::new(T_LOOK_LEFT, Pos::new(0, 2)),
+            PlacedBoundariesChecked::in_boundaries(
+                Placed::new(T_LOOK_LEFT, Pos::new(0, 2)),
                 Size::new(3, 3)
             ),
             Some(_)

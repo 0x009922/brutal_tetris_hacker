@@ -3,10 +3,10 @@ use std::num::NonZeroUsize;
 
 use grid::Grid;
 
-use crate::tetra::{PlacedTetra, PlacedTetraInBoundaries, RandomTetras, Tetra};
+use crate::tetra::{Placed, PlacedBoundariesChecked, Shuffler, Tetra};
 use crate::util::{Pos, PosInGrid, Size, SizeOf};
 
-pub type Placement = Vec<PlacedTetraInBoundaries>;
+pub type Placement = Vec<PlacedBoundariesChecked>;
 
 pub struct Configuration {
     /// Size of the grid
@@ -70,7 +70,7 @@ where
 {
     grid: Grid<Cell>,
     how_many_free: usize,
-    stack: Vec<PlacedTetraInBoundaries>,
+    stack: Vec<PlacedBoundariesChecked>,
     results: Vec<PlacementResult>,
     positions_for_lookup: Vec<Pos>,
     initially_unavailable: usize,
@@ -79,7 +79,7 @@ where
     results_limit: Option<NonZeroUsize>,
 
     acceptance_threshold: usize,
-    random_tetras: RandomTetras,
+    random_tetras: Shuffler,
 }
 
 enum RecursionResult {
@@ -147,7 +147,7 @@ where
             positions_for_lookup: iter_positions,
 
             results_limit: *results_limit,
-            random_tetras: RandomTetras::new(),
+            random_tetras: Shuffler::new(),
         }
     }
 
@@ -185,7 +185,7 @@ where
         RecursionResult::Continue
     }
 
-    fn fill_and_push(&mut self, tetra: PlacedTetraInBoundaries) {
+    fn fill_and_push(&mut self, tetra: PlacedBoundariesChecked) {
         for i in tetra.iter_relative_to_place() {
             self.grid[i.row][i.col] = Cell::Occupied;
             self.how_many_free -= 1;
@@ -203,12 +203,12 @@ where
         self.update_lookup_cache();
     }
 
-    fn find_any_fit_for(&self, tetra: &'static Tetra) -> Option<PlacedTetraInBoundaries> {
+    fn find_any_fit_for(&self, tetra: &'static Tetra) -> Option<PlacedBoundariesChecked> {
         self.positions_for_lookup
             .iter()
             .map(|pos| {
-                PlacedTetraInBoundaries::in_boundaries(
-                    PlacedTetra::new(tetra, *pos),
+                PlacedBoundariesChecked::in_boundaries(
+                    Placed::new(tetra, *pos),
                     self.grid.size_of(),
                 )
             })

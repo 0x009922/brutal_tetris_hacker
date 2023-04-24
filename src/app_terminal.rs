@@ -16,7 +16,7 @@ use crossterm::{
 use grid::Grid;
 
 use crate::algorithm::{Configuration, PlacementResult};
-use crate::tetra::PlacedTetraInBoundaries;
+use crate::tetra::PlacedBoundariesChecked;
 use crate::util::{Pos, Size};
 
 pub const CHAR_EMPTY: char = '·';
@@ -191,7 +191,7 @@ fn print_field_setup(
                     SetBackgroundColor(if under_cursor {
                         Color::DarkRed
                     } else {
-                        Color::White
+                        Color::Reset
                     }),
                     SetAttribute(Attribute::Bold),
                     SetForegroundColor(Color::DarkRed),
@@ -204,7 +204,7 @@ fn print_field_setup(
                     SetBackgroundColor(if under_cursor {
                         Color::DarkGrey
                     } else {
-                        Color::White
+                        Color::Reset
                     }),
                     Print(CHAR_EMPTY),
                     ResetColor
@@ -221,115 +221,106 @@ fn print_field_setup(
     Ok(())
 }
 
-pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Result<()> {
-    #[derive(Clone)]
-    enum View {
-        Tetro {
-            char: char,
-            color: Color,
-            attr: OptionAttribute,
-        },
-        Empty,
-        Unavailable,
-    }
+#[derive(Clone)]
+enum CellView {
+    Tetra(TetraView),
+    Empty,
+    Unavailable,
+}
 
-    #[derive(Clone)]
-    struct OptionAttribute(Option<Attribute>);
+#[derive(Clone)]
+struct TetraView {
+    char: char,
+    color: Color,
+    attr: OptionAttribute,
+}
 
-    impl Command for OptionAttribute {
-        fn write_ansi(&self, f: &mut impl Write) -> std::fmt::Result {
-            match self.0 {
-                Some(attr) => SetAttribute(attr).write_ansi(f),
-                None => Ok(()),
-            }
+#[derive(Clone)]
+struct OptionAttribute(Option<Attribute>);
+
+impl Command for OptionAttribute {
+    fn write_ansi(&self, f: &mut impl Write) -> std::fmt::Result {
+        match self.0 {
+            Some(attr) => SetAttribute(attr).write_ansi(f),
+            None => Ok(()),
         }
     }
+}
 
-    struct TetroViewsComposer {
-        views: HashMap<PlacedTetraInBoundaries, View>,
-        colors: Vec<Color>,
-        attrs: Vec<Option<Attribute>>,
-    }
+fn compose_tetra_views(result: &PlacementResult) -> HashMap<&PlacedBoundariesChecked, TetraView> {
+    const COLORS: [Color; 5] = [
+        Color::Green,
+        Color::Cyan,
+        Color::Blue,
+        Color::Magenta,
+        Color::Yellow,
+    ];
 
-    impl TetroViewsComposer {
-        fn new() -> Self {
-            Self {
-                views: HashMap::new(),
-                colors: vec![
-                    Color::Green,
-                    Color::Cyan,
-                    Color::Blue,
-                    Color::Magenta,
-                    Color::Yellow,
-                ],
-                attrs: vec![None, Some(Attribute::Bold), Some(Attribute::Italic)],
-            }
-        }
+    const ATTRIBUTES: [Option<Attribute>; 3] =
+        [None, Some(Attribute::Bold), Some(Attribute::Italic)];
 
-        fn update(mut self, item: PlacedTetraInBoundaries) -> Self {
-            let idx = self.views.len();
-
-            let sym = char::from_u32(
-                // ASCII 'A'
-                (65 + idx) as u32,
-            )
-            .unwrap();
-
-            let idx_in_colors_total = idx % (self.colors.len() * self.attrs.len());
-            let idx_in_colors = idx_in_colors_total % self.colors.len();
-            let idx_in_attrs = idx_in_colors_total / self.colors.len();
-
-            self.views.insert(
-                item,
-                View::Tetro {
-                    char: sym,
-                    color: self.colors[idx_in_colors],
-                    attr: OptionAttribute(self.attrs[idx_in_attrs]),
-                },
-            );
-            self
-        }
-    }
-
-    let TetroViewsComposer { views, .. } = result
+    let map: HashMap<_, _> = result
         .placement
         .iter()
-        .fold(TetroViewsComposer::new(), |acc, item| {
-            acc.update(item.clone())
-        });
+        .enumerate()
+        .map(|(idx, tetra)| {
+            let sym = char::from_u32(('A' as usize + idx) as u32).unwrap();
 
-    let mut grid = Grid::init(conf.size.rows, conf.size.cols, View::Empty);
+            let relative = idx % (COLORS.len() * ATTRIBUTES.len());
+            let idx_color = relative % COLORS.len();
+            let idx_attr = relative / COLORS.len();
 
-    for item in &result.placement {
-        let view = views.get(item).unwrap();
-        for i in item.iter_relative_to_place() {
-            grid[i.row][i.col] = (*view).clone();
+            let view = TetraView {
+                char: sym,
+                color: COLORS[idx_color],
+                attr: OptionAttribute(ATTRIBUTES[idx_attr]),
+            };
+
+            (tetra, view)
+        })
+        .collect();
+
+    map
+}
+
+fn grid_view(result: &PlacementResult, conf: &Configuration) -> Grid<CellView> {
+    let mut grid = Grid::init(conf.size.rows, conf.size.cols, CellView::Empty);
+
+    for Pos { row, col } in &conf.unavailable {
+        grid[*row][*col] = CellView::Unavailable;
+    }
+
+    for (tetra, view) in compose_tetra_views(result) {
+        for Pos { row, col } in tetra.iter_relative_to_place() {
+            grid[row][col] = CellView::Tetra(view.clone());
         }
     }
 
-    for Pos { row, col } in &conf.unavailable {
-        grid[*row][*col] = View::Unavailable;
-    }
+    grid
+}
+
+pub fn report_placement(result: &PlacementResult, conf: &Configuration) -> Result<()> {
+    let grid = grid_view(result, conf);
 
     for row in 0..grid.rows() {
         stdout().execute(Print("  "))?;
         for view in grid.iter_row(row) {
             match view {
-                View::Empty => execute!(
+                CellView::Empty => execute!(
                     stdout(),
                     SetForegroundColor(Color::Grey),
                     SetAttribute(Attribute::Dim),
                     Print(CHAR_EMPTY),
                     ResetColor,
                 )?,
-                View::Unavailable => execute!(
+                CellView::Unavailable => execute!(
                     stdout(),
                     SetForegroundColor(Color::DarkRed),
-                    SetBackgroundColor(Color::DarkRed),
+                    // SetBackgroundColor(Color::DarkRed),
                     Print(CHAR_UNAVAILABLE),
                     ResetColor
                 )?,
-                View::Tetro { char, color, attr } => {
+                CellView::Tetra(TetraView { char, color, attr }) => {
                     execute!(
                         stdout(),
                         SetForegroundColor(*color),

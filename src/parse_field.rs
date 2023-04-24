@@ -109,7 +109,7 @@ mod tests {
                 size: Size::new(2, 2),
                 unavailable: HashSet::new()
             })
-        )
+        );
     }
 
     #[test]
@@ -127,7 +127,7 @@ mod tests {
                     set
                 }
             })
-        )
+        );
     }
 
     #[test]
@@ -142,6 +142,6 @@ mod tests {
                 char_empty: '-',
                 row: 1
             })
-        )
+        );
     }
 }
