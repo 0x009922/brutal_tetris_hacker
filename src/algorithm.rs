@@ -35,7 +35,7 @@ impl Configuration {
     where
         S: CollectStats,
     {
-        RecursionState::run(self, stats)
+        RecursionState::find_placements(self, stats)
     }
 }
 
@@ -93,9 +93,9 @@ impl<'a, S> RecursionState<'a, S>
 where
     S: CollectStats,
 {
-    fn run(cfg: &Configuration, stats: &'a mut S) -> Vec<PlacementResult> {
+    fn find_placements(cfg: &Configuration, stats: &'a mut S) -> Vec<PlacementResult> {
         let mut recursion = RecursionState::with_configuration(cfg, stats);
-        recursion.recursion();
+        recursion.run();
         recursion.results
     }
 
@@ -151,7 +151,7 @@ where
         }
     }
 
-    fn recursion(&mut self) -> RecursionResult {
+    fn run(&mut self) -> RecursionResult {
         self.stats.recursions_inc();
 
         let mut was_any_fit = false;
@@ -160,7 +160,7 @@ where
             if let Some(tetra_in_boundaries) = self.find_any_fit_for(tetra) {
                 was_any_fit = true;
                 self.fill_and_push(tetra_in_boundaries);
-                match self.recursion() {
+                match self.run() {
                     x @ RecursionResult::Halt => return x,
                     RecursionResult::Continue => {}
                 }
@@ -169,6 +169,8 @@ where
         }
 
         if !was_any_fit && self.how_many_free < self.acceptance_threshold {
+            // TODO: check if same set of free cells is already stored
+
             self.results.push(PlacementResult {
                 placement: self.stack.clone(),
                 free: 0,
