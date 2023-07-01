@@ -9,9 +9,9 @@ use std::io::{stderr, stdout};
 use std::num::NonZeroUsize;
 
 use clap::{Parser, ValueEnum};
-use color_eyre::eyre::Context;
 use crossterm::style::Print;
 use crossterm::{cursor, terminal, ExecutableCommand};
+use miette::{miette, Result, WrapErr};
 
 use algorithm::CollectStats;
 
@@ -84,7 +84,11 @@ impl CollectStats for Stats {
     }
 }
 
-fn main() -> Result<(), color_eyre::Report> {
+fn io_err_into_diagnostic(err: std::io::Error) -> miette::Report {
+    miette!("{err}")
+}
+
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let conf = {
@@ -99,10 +103,11 @@ fn main() -> Result<(), color_eyre::Report> {
                 .map(|parse_field::ParsedField { size, unavailable }| {
                     algorithm::Configuration::new(size, unavailable)
                 })
-                .map_err(|err| color_eyre::eyre::eyre!("Failed to parse field from STDIN: {err}"))?
+                .wrap_err("Failed to parse field from STDIN")?
         } else {
             app_terminal::live_configuration::State::new(4, 4)
-                .live()?
+                .live()
+                .map_err(io_err_into_diagnostic)?
                 .into_configuration()
         };
 
@@ -113,7 +118,7 @@ fn main() -> Result<(), color_eyre::Report> {
     };
 
     if let OutputFormat::Default = args.output_format {
-        conf.print_field()?;
+        conf.print_field().map_err(io_err_into_diagnostic)?;
     }
 
     let mut stats = Stats::new();
@@ -123,21 +128,28 @@ fn main() -> Result<(), color_eyre::Report> {
     match args.output_format {
         OutputFormat::Default => {
             for item in &placements {
-                app_terminal::report_placement(item, &conf)?;
-                stdout().execute(Print("\n"))?;
+                app_terminal::report_placement(item, &conf).map_err(io_err_into_diagnostic)?;
+                stdout()
+                    .execute(Print("\n"))
+                    .map_err(io_err_into_diagnostic)?;
             }
 
-            stdout().execute(Print(format!(
-                "\n  Found placements: {} (time: {:.2?})\n",
-                placements.len(),
-                elapsed
-            )))?;
+            stdout()
+                .execute(Print(format!(
+                    "\n  Found placements: {} (time: {:.2?})\n",
+                    placements.len(),
+                    elapsed
+                )))
+                .map_err(io_err_into_diagnostic)?;
         }
         OutputFormat::Json => {
             let output = structured_output::Output::new(&placements);
             let json = serde_json::to_string_pretty(&output)
+                .map_err(|err| miette!("{err}"))
                 .wrap_err("Failed to serialise output into JSON")?;
-            stdout().execute(Print(json))?;
+            stdout()
+                .execute(Print(json))
+                .map_err(io_err_into_diagnostic)?;
         }
     }
 

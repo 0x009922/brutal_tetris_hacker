@@ -70,12 +70,12 @@ pub mod live_configuration {
             }
 
             stdout().execute(EnterAlternateScreen)?;
-            terminal::enable_raw_mode().unwrap();
+            terminal::enable_raw_mode()?;
 
             self.print()?;
 
             let loop_result = loop {
-                if let Event::Key(event::KeyEvent { code, .. }) = event::read().unwrap() {
+                if let Event::Key(event::KeyEvent { code, .. }) = event::read()? {
                     match code {
                         event::KeyCode::Esc => break LoopResult::Terminate,
                         event::KeyCode::Enter => break LoopResult::Proceed,
