@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
+use std::ops::ControlFlow;
 
 use grid::Grid;
 
@@ -82,11 +83,6 @@ where
     random_tetras: Shuffler,
 }
 
-enum RecursionResult {
-    Continue,
-    Halt,
-}
-
 const CACHE_EACH_TETRAS: usize = 4;
 
 impl<'a, S> RecursionState<'a, S>
@@ -151,7 +147,7 @@ where
         }
     }
 
-    fn run(&mut self) -> RecursionResult {
+    fn run(&mut self) -> ControlFlow<()> {
         self.stats.recursions_inc();
 
         let mut was_any_fit = false;
@@ -160,9 +156,8 @@ where
             if let Some(tetra_in_boundaries) = self.find_any_fit_for(tetra) {
                 was_any_fit = true;
                 self.fill_and_push(tetra_in_boundaries);
-                match self.run() {
-                    x @ RecursionResult::Halt => return x,
-                    RecursionResult::Continue => {}
+                if let ControlFlow::Break(_) = self.run() {
+                    return ControlFlow::Break(());
                 }
                 self.pop_and_clear();
             }
@@ -179,12 +174,12 @@ where
 
             if let Some(limit) = self.results_limit {
                 if self.results.len() == limit.get() {
-                    return RecursionResult::Halt;
+                    return ControlFlow::Break(());
                 }
             }
         }
 
-        RecursionResult::Continue
+        ControlFlow::Continue(())
     }
 
     fn fill_and_push(&mut self, tetra: PlacedBoundariesChecked) {
