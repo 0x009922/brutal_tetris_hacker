@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 
@@ -7,7 +7,7 @@ use grid::Grid;
 use crate::tetra::{Placed, PlacedBoundariesChecked, Shuffler, Tetra};
 use crate::util::{Pos, PosInGrid, Size, SizeOf};
 
-pub type Placement = Vec<PlacedBoundariesChecked>;
+pub type Placement = BTreeSet<PlacedBoundariesChecked>;
 
 pub struct Configuration {
     /// Size of the grid
@@ -32,7 +32,7 @@ impl Configuration {
         self
     }
 
-    pub fn run<S>(&self, stats: &'_ mut S) -> Vec<PlacementResult>
+    pub fn run<S>(&self, stats: &'_ mut S) -> BTreeSet<PlacementResult>
     where
         S: CollectStats,
     {
@@ -72,7 +72,7 @@ where
     grid: Grid<Cell>,
     how_many_free: usize,
     stack: Vec<PlacedBoundariesChecked>,
-    results: Vec<PlacementResult>,
+    results: BTreeSet<PlacementResult>,
     positions_for_lookup: Vec<Pos>,
     stats: &'a mut S,
 
@@ -86,7 +86,7 @@ impl<'a, S> RecursionState<'a, S>
 where
     S: CollectStats,
 {
-    fn find_placements(cfg: &Configuration, stats: &'a mut S) -> Vec<PlacementResult> {
+    fn find_placements(cfg: &Configuration, stats: &'a mut S) -> BTreeSet<PlacementResult> {
         let mut recursion = RecursionState::with_configuration(cfg, stats);
         recursion.run();
         recursion.results
@@ -115,7 +115,6 @@ where
             ((how_many_free - min_free_cells) as f64).powf(0.5).floor() as usize;
 
         let stack = Vec::with_capacity(cols * rows);
-        let results = Vec::new();
 
         // all positions except unavailable
         let mut iter_positions = Vec::with_capacity(cols * rows);
@@ -133,7 +132,7 @@ where
             acceptance_threshold,
 
             stack,
-            results,
+            results: BTreeSet::new(),
             stats,
 
             positions_for_lookup: iter_positions,
@@ -160,17 +159,17 @@ where
         }
 
         if !was_any_fit && self.how_many_free < self.acceptance_threshold {
-            // TODO: check if same set of free cells is already stored
-
-            self.results.push(PlacementResult {
-                placement: self.stack.clone(),
-                free: 0,
-            });
-            self.stats.results_inc();
-
-            if let Some(limit) = self.results_limit {
-                if self.results.len() == limit.get() {
-                    return ControlFlow::Break(());
+            let result = PlacementResult {
+                placement: self.stack.iter().cloned().collect(),
+                free: self.how_many_free,
+            };
+            if !self.results.contains(&result) {
+                self.results.insert(result);
+                self.stats.results_inc();
+                if let Some(limit) = self.results_limit {
+                    if self.results.len() == limit.get() {
+                        return ControlFlow::Break(());
+                    }
                 }
             }
         }
@@ -216,7 +215,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PlacementResult {
     pub placement: Placement,
     pub free: usize,
