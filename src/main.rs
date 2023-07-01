@@ -1,13 +1,15 @@
 mod algorithm;
 mod app_terminal;
 mod parse_field;
+mod structured_output;
 mod tetra;
 mod util;
 
-use std::io::stdout;
+use std::io::{stderr, stdout};
 use std::num::NonZeroUsize;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use color_eyre::eyre::Context;
 use crossterm::style::Print;
 use crossterm::{cursor, terminal, ExecutableCommand};
 
@@ -30,6 +32,15 @@ struct Args {
     /// In case of reading the field from STDIN, which character treat as an unavailable cell
     #[arg(long, default_value_t = 'x')]
     stdin_char_busy: char,
+    #[arg(long, value_enum, default_value_t)]
+    output_format: OutputFormat,
+}
+
+#[derive(ValueEnum, Default, Debug, Clone)]
+enum OutputFormat {
+    #[default]
+    Default,
+    Json,
 }
 
 struct Stats {
@@ -53,7 +64,7 @@ impl CollectStats for Stats {
         self.recursions += 1;
 
         if self.recursions % 100_000 == 0 {
-            stdout()
+            stderr()
                 .execute(terminal::Clear(terminal::ClearType::CurrentLine))
                 .unwrap()
                 .execute(cursor::MoveLeft(100))
@@ -101,22 +112,34 @@ fn main() -> Result<(), color_eyre::Report> {
         conf
     };
 
-    conf.print_field()?;
+    if let OutputFormat::Default = args.output_format {
+        conf.print_field()?;
+    }
 
     let mut stats = Stats::new();
     let placements = conf.run(&mut stats);
     let elapsed = stats.start.elapsed();
 
-    for item in &placements {
-        app_terminal::report_placement(item, &conf)?;
-        stdout().execute(Print("\n"))?;
-    }
+    match args.output_format {
+        OutputFormat::Default => {
+            for item in &placements {
+                app_terminal::report_placement(item, &conf)?;
+                stdout().execute(Print("\n"))?;
+            }
 
-    stdout().execute(Print(format!(
-        "\n  Found placements: {} (time: {:.2?})\n",
-        placements.len(),
-        elapsed
-    )))?;
+            stdout().execute(Print(format!(
+                "\n  Found placements: {} (time: {:.2?})\n",
+                placements.len(),
+                elapsed
+            )))?;
+        }
+        OutputFormat::Json => {
+            let output = structured_output::Output::new(&placements);
+            let json = serde_json::to_string_pretty(&output)
+                .wrap_err("Failed to serialise output into JSON")?;
+            stdout().execute(Print(json))?;
+        }
+    }
 
     Ok(())
 }

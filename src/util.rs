@@ -3,8 +3,9 @@ use std::ops::Add;
 
 use derive_more::Display;
 use grid::Grid;
+use serde::Serialize;
 
-#[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Display)]
+#[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Display, Serialize)]
 #[display(fmt = "({row}, {col})")]
 pub struct Pos {
     pub row: usize,

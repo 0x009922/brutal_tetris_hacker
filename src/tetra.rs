@@ -1,7 +1,7 @@
 use super::util::Pos;
 use crate::util::Size;
 
-use std::ops::Add;
+use std::ops::{Add, Deref};
 
 #[derive(Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct Tetra {
@@ -58,7 +58,7 @@ macro_rules! tetra {
     };
 }
 
-const TETRAS: [Tetra; TETRAS_COUNT] = [
+pub const TETRAS: [Tetra; TETRAS_COUNT] = [
     tetra!((0, 0), (0, 1), (1, 0), (1, 1), 0),
     tetra!((0, 0), (0, 1), (0, 2), (0, 3), 0),
     tetra!((0, 0), (1, 0), (2, 0), (3, 0), 0),
@@ -151,6 +151,14 @@ impl PlacedBoundariesChecked {
             pos.col -= tetra.col_shift;
             pos
         })
+    }
+}
+
+impl Deref for PlacedBoundariesChecked {
+    type Target = Placed;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
