@@ -28,6 +28,7 @@ pub mod live_configuration {
         EnterAlternateScreen, Event, ExecutableCommand, HashSet, LeaveAlternateScreen, Pos, Print,
         RawMode, Result, Size,
     };
+    use crossterm::style::{Attribute, Color, SetAttribute, SetForegroundColor};
 
     struct Bounded<const N: usize, const M: usize>(usize);
 
@@ -123,12 +124,72 @@ pub mod live_configuration {
         fn print(&self) -> Result<()> {
             stdout()
                 .execute(cursor::MoveTo(0, 0))?
-                .execute(Print(
-                    "Controls: wasd - resize; arrows - move; space - click; esc - stop".to_string(),
-                ))?
+                .execute(Print("Controls:"))?
                 .execute(cursor::MoveToNextLine(2))?
-                .execute(Print(format!("N x M: {} x {}", self.rows.0, self.cols.0)))?
-                .execute(cursor::MoveToNextLine(2))?;
+                .execute(cursor::MoveRight(2))?;
+
+            fn print_simple_controls(controls: &str) -> Result<()> {
+                for (i, symbol) in controls.chars().enumerate() {
+                    if i > 0 {
+                        stdout()
+                            .execute(SetForegroundColor(Color::Grey))?
+                            .execute(SetAttribute(Attribute::Dim))?
+                            .execute(Print(" / "))?
+                            .execute(SetAttribute(Attribute::Reset))?;
+                    }
+
+                    stdout()
+                        .execute(SetForegroundColor(Color::Blue))?
+                        .execute(Print(symbol))?;
+                }
+
+                Ok(())
+            }
+
+            print_simple_controls("WASD")?;
+
+            stdout()
+                .execute(SetForegroundColor(Color::Reset))?
+                .execute(Print(" - resize the field"))?
+                .execute(cursor::MoveToNextLine(1))?
+                .execute(cursor::MoveRight(2))?;
+
+            print_simple_controls("↑←↓→")?;
+
+            stdout()
+                .execute(SetForegroundColor(Color::Reset))?
+                .execute(Print(" - move the cursor"))?
+                .execute(cursor::MoveToNextLine(1))?
+                .execute(cursor::MoveRight(2))?
+                .execute(SetForegroundColor(Color::Blue))?
+                .execute(Print("Space"))?
+                .execute(SetForegroundColor(Color::Reset))?
+                .execute(Print(" - toggle the cell"))?
+                .execute(cursor::MoveToNextLine(1))?
+                .execute(cursor::MoveRight(2))?
+                .execute(SetForegroundColor(Color::Yellow))?
+                .execute(Print("Esc"))?
+                .execute(SetForegroundColor(Color::Reset))?
+                .execute(Print(" - ../"))?;
+
+            stdout().execute(cursor::MoveToNextLine(2))?;
+
+            // execute!(
+            //     stdout(),
+            //     cursor::MoveTo(0, 0),
+            //     Print("Controls:"),
+            //     cursor::MoveTo(2, 1),
+            //     SetForegroundColor(Color::Blue),
+            //     Print("W")
+            // )?;
+            // stdout()
+            //     .execute(cursor::MoveTo(0, 0))?
+            //     .execute(Print(
+            //         "Controls: wasd - resize; arrows - move; space - click; esc - stop".to_string(),
+            //     ))?
+            //     .execute(cursor::MoveToNextLine(2))?
+            //     .execute(Print(format!("N x M: {} x {}", self.rows.0, self.cols.0)))?
+            //     .execute(cursor::MoveToNextLine(2))?;
 
             print_field_setup(
                 self.as_size(),
