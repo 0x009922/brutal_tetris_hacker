@@ -74,7 +74,6 @@ where
     stack: Vec<PlacedBoundariesChecked>,
     results: Vec<PlacementResult>,
     positions_for_lookup: Vec<Pos>,
-    initially_unavailable: usize,
     stats: &'a mut S,
 
     results_limit: Option<NonZeroUsize>,
@@ -82,8 +81,6 @@ where
     acceptance_threshold: usize,
     random_tetras: Shuffler,
 }
-
-const CACHE_EACH_TETRAS: usize = 4;
 
 impl<'a, S> RecursionState<'a, S>
 where
@@ -120,7 +117,7 @@ where
         let stack = Vec::with_capacity(cols * rows);
         let results = Vec::new();
 
-        // initially - all positions except unavailable
+        // all positions except unavailable
         let mut iter_positions = Vec::with_capacity(cols * rows);
         for row in 0..rows {
             for col in 0..cols {
@@ -139,7 +136,6 @@ where
             results,
             stats,
 
-            initially_unavailable,
             positions_for_lookup: iter_positions,
 
             results_limit: *results_limit,
@@ -188,7 +184,6 @@ where
             self.how_many_free -= 1;
         }
         self.stack.push(tetra);
-        self.update_lookup_cache();
     }
 
     fn pop_and_clear(&mut self) {
@@ -197,7 +192,6 @@ where
             self.grid[i.row][i.col] = Cell::Empty;
             self.how_many_free += 1;
         }
-        self.update_lookup_cache();
     }
 
     fn find_any_fit_for(&self, tetra: &'static Tetra) -> Option<PlacedBoundariesChecked> {
@@ -219,49 +213,6 @@ where
                 false
             })
             .flatten()
-    }
-
-    /// should be called after pushing and popping a tetra
-    fn update_lookup_cache(&mut self) {
-        let how_many_exclude = {
-            let stacked = self.stack.len();
-            let cached = (self.grid.cols() * self.grid.rows() - self.initially_unavailable)
-                - self.positions_for_lookup.len();
-
-            if stacked < cached || stacked - cached >= CACHE_EACH_TETRAS {
-                let floor = stacked - stacked % CACHE_EACH_TETRAS;
-                let exclude = floor * 4;
-                Some(exclude)
-            } else {
-                None
-            }
-        };
-
-        if let Some(mut excluded) = how_many_exclude {
-            self.positions_for_lookup.clear();
-
-            for row in 0..self.grid.rows() {
-                for col in 0..self.grid.cols() {
-                    enum Decision {
-                        Add,
-                        Ignore,
-                    }
-
-                    let decision = match self.grid[row][col] {
-                        Cell::Occupied if excluded > 0 => {
-                            excluded -= 1;
-                            Decision::Ignore
-                        }
-                        Cell::Occupied | Cell::Empty => Decision::Add,
-                        Cell::Unavailable => Decision::Ignore,
-                    };
-
-                    if let Decision::Add = decision {
-                        self.positions_for_lookup.push(Pos::new(row, col));
-                    }
-                }
-            }
-        }
     }
 }
 
